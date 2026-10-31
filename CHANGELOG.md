@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.0.2
+
+- **Python 3.9-3.11 compatibility.** 1.0.1 introduced two PEP 701 constructs that only 3.12+ accepts
+  and broke the 3.9/3.10/3.11 CI jobs:
+  - a nested same-quote f-string (`f"...{paint(f"{sev:<22}", ...)}..."`)
+  - backslash escapes inside f-string *expressions* (`{paint(' \u00b7 '.join(...))}`)
+
+  Both are gone; the affected characters (`, `, ..., flags, rules) now come from module-level
+  constants in `cvere/util.py`. Verified with real 3.9.25 / 3.10.22 / 3.11.18 / 3.13.16 interpreters,
+  not just syntax guesswork.
+- Two guard tests (`TestCompatibility`) fail on either pattern, so it cannot regress silently.
+- 44 offline unit tests.
+
 ## 1.0.1
 
 - **Console output is now terminal-width aware.** The summary row used to be a fixed ~131 columns,

@@ -6,6 +6,15 @@ import re
 import shutil
 import sys
 
+# --------------------------------------------------------------------------- glyphs
+# Module-level constants: a backslash escape inside an f-string *expression* is a syntax error
+# before Python 3.12 (PEP 701), so these characters are never inlined there.
+DOT = "\u00b7"        # ·
+ELLIPSIS = "\u2026"   # …
+FLAG = "\u2691"       # ⚑
+RULE = "\u2500"       # ─
+
+
 # --------------------------------------------------------------------------- colour
 
 RESET = "\033[0m"

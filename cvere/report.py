@@ -7,8 +7,8 @@ import time
 from typing import Any
 
 from .models import Service, Vuln
-from .util import (SEVERITY_STYLE, Paint, fmt_epss, fmt_score, severity_badge, severity_for,
-                   term_width, truncate)
+from .util import (DOT, ELLIPSIS, FLAG, RULE, SEVERITY_STYLE, Paint, fmt_epss, fmt_score,
+                   severity_badge, severity_for, term_width, truncate)
 
 SOURCE_ICON = {
     "poc-in-github": "github",
@@ -23,7 +23,7 @@ SOURCE_ICON = {
 # --------------------------------------------------------------------------- console
 
 def _rule(paint: Paint, width: int) -> str:
-    return paint("\u2500" * min(width, 92), "grey")
+    return paint(RULE * min(width, 92), "grey")
 
 
 def render_console(vulns: list[Vuln], services: list[Service], paint: Paint, verbose: bool = False,
@@ -71,7 +71,8 @@ def render_console(vulns: list[Vuln], services: list[Service], paint: Paint, ver
                       f"EPSS {fmt_epss(v.epss):>7}  ")
             tail = f" {flagstr}" if flagstr else ""
             tw = max(24, width - len(prefix) - len(tail))
-            row = (f"  {paint(v.cve_id.ljust(idw), 'bold')}  {paint(f"{sev:<22}", *style)} "
+            sev_pad = paint(f"{sev:<22}", *style)   # keep quoting pre-3.12 compatible
+            row = (f"  {paint(v.cve_id.ljust(idw), 'bold')}  {sev_pad} "
                    f"{fmt_score(v.cvss):>4}  EPSS {fmt_epss(v.epss):>7}  "
                    f"{truncate(head, tw):<{tw}}")
             out.append(f"{row}{tail}".rstrip())
@@ -81,7 +82,7 @@ def render_console(vulns: list[Vuln], services: list[Service], paint: Paint, ver
     for v in vulns:
         out.append(_rule(paint, width))
         # measure, do not predict: build the richest form that still fits
-        def header(ver: bool, kev_text: str = "\u2691 CISA KEV") -> str:
+        def header(ver: bool, kev_text: str = FLAG + " CISA KEV") -> str:
             ver_s = f" (CVSS {v.cvss_version})" if (ver and v.cvss_version) else ""
             kev_s = f"   {kev_text}" if v.kev else ""
             return (f"{v.cve_id}  {v.severity} {fmt_score(v.cvss)}"
@@ -96,8 +97,8 @@ def render_console(vulns: list[Vuln], services: list[Service], paint: Paint, ver
         styled = styled.replace(v.severity, severity_badge(v.cvss, paint), 1)
         if "(CVSS" in plain:
             styled = styled.replace(plain[plain.index(" (CVSS"):plain.index(")") + 1], paint(plain[plain.index(" (CVSS"):plain.index(")") + 1], "grey"), 1)
-        if "\u2691 CISA KEV" in plain:
-            styled = styled.replace("\u2691 CISA KEV", paint("\u2691 CISA KEV", "bred", "bold"), 1)
+        if FLAG + " CISA KEV" in plain:
+            styled = styled.replace(FLAG + " CISA KEV", paint(FLAG + " CISA KEV", "bred", "bold"), 1)
         head = styled
         out.append(head)
         if v.matched:
@@ -110,7 +111,7 @@ def render_console(vulns: list[Vuln], services: list[Service], paint: Paint, ver
         if v.cvss_vector and len(v.cvss_vector) <= 64:
             meta.append(v.cvss_vector)
         if meta:
-            out.append(f"  {paint(truncate(' \u00b7 '.join(meta), width - 2), 'grey')}")
+            out.append(f"  {paint(truncate(' ' + DOT + ' '.join(meta), width - 2), 'grey')}")
         if v.kev:
             k = v.kev_info
             kev = (f"KEV: {k.get('name','')} added {k.get('dateAdded','')}"
@@ -129,8 +130,7 @@ def render_console(vulns: list[Vuln], services: list[Service], paint: Paint, ver
                 for f in items[:8]:
                     out.extend(_finding_lines(f, paint, width))
                 if len(items) > 8:
-                    out[-1] += ""
-                    out.append(f"    {paint(f'\u2026 {len(items) - 8} more (JSON/MD report has all)', 'grey')}")
+                    out.append(f"    {paint(ELLIPSIS + f' {len(items) - 8} more (JSON/MD report has all)', 'grey')}")
         elif v.source_errors:
             out.append(f"  {paint('no public PoC found', 'yellow')}")
         else:

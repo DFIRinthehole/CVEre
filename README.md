@@ -14,7 +14,7 @@ public PoC ecosystem and how CVEre covers each tier.
 ██     ██   ██ ██     ██ ██  ██  ██
 ██     ██   ██ █████  ████   █████     nmap / CVE  ->  public PoC, exploits & exploit intel
 ██      ██ ██  ██     ██     ██
- █████   ███   ██████ ██      ████     v1.0.1 - 9 sources
+ █████   ███   ██████ ██      ████     v1.0.2 - 9 sources
 ```
 
 ---
@@ -209,7 +209,7 @@ and controls ordering.
 ## Tests
 
 ```bash
-python3 -m unittest discover -s tests -v   # 41 tests, fully offline
+python3 -m unittest discover -s tests -v   # 44 tests, fully offline
 ```
 
 ## Caveats — read this

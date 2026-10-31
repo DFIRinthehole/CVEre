@@ -2,8 +2,11 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import json
 import os
+import pathlib
+import re
 import sys
 import tempfile
 import unittest
@@ -400,3 +403,37 @@ class TestCli(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class TestCompatibility(unittest.TestCase):
+    """CI runs 3.9-3.13. PEP 701 f-strings (3.12+) must never sneak back in - they took the
+    3.9/3.10/3.11 builds down once already."""
+
+    SOURCES = sorted((pathlib.Path(__file__).parent.parent / "cvere").glob("*.py")) + \
+        [pathlib.Path(__file__)]
+
+    def test_no_backslash_inside_fstring_expression(self):
+        for path in self.SOURCES:
+            src = path.read_text(encoding="utf-8")
+            tree = ast.parse(src)
+            for node in ast.walk(tree):
+                if isinstance(node, ast.FormattedValue):
+                    seg = ast.get_source_segment(src, node.value) or ""
+                    self.assertNotIn(
+                        "\\", seg,
+                        f"{path.name}:{node.lineno} backslash inside an f-string expression "
+                        f"is a SyntaxError before 3.12: {{{seg[:60]}}}",
+                    )
+
+    def test_no_nested_same_quote_fstrings(self):
+        pattern = re.compile(r"""f"[^"\n]*\{[^}\n]*f"|f'[^'\n]*\{[^}\n]*f'""")
+        for path in self.SOURCES:
+            for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+                self.assertIsNone(
+                    pattern.search(line),
+                    f"{path.name}:{lineno} nested same-quote f-string (PEP 701, 3.12+): {line.strip()[:70]}",
+                )
+
+    def test_every_module_compiles(self):
+        for path in self.SOURCES:
+            compile(path.read_text(encoding="utf-8"), str(path), "exec")

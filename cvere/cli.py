@@ -18,7 +18,7 @@ from .sources import ADAPTERS, DEFAULT_SOURCES, Ctx, run_sources
 from .util import Paint, severity_for
 
 CVE_RE = re.compile(r"^CVE-\d{4}-\d{4,}$", re.I)
-VERSION = "1.0.1"
+VERSION = "1.0.2"
 
 TAGLINE = "nmap / CVE  \u2192  public PoC, exploits & exploit intel"
 

@@ -63,6 +63,9 @@ desktop.ini
 reports/*.json
 # local scan output, caches and throwaway JSON
 *.log
+*.patch
+*.diff
+*.bundle
 *.gnmap
 *.nmap
 .cvere-cache/
