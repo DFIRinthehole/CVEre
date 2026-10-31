@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE nmaprun>
+<?xml-stylesheet href="file:///usr/share/nmap/nmap.xsl" type="text/xsl"?>
+<!-- Nmap 7.94 scan initiated Mon Oct 27 09:14:02 2025 as: nmap -sV -sC -oX scan.xml 10.10.14.0/24 -->
+<nmaprun scanner="nmap" args="nmap -sV -sC -oX scan.xml 10.10.14.0/24" start="1761556442" version="7.94">
+<host starttime="1761556442" endtime="1761556520">
+<status state="up" reason="arp-response"/>
+<address addr="10.10.14.7" addrtype="ipv4"/>
+<hostnames>
+<hostname name="web01.lab.local" type="PTR"/>
+</hostnames>
+<ports>
+<port protocol="tcp" portid="22">
+<state state="open" reason="syn-ack"/>
+<service name="ssh" product="OpenSSH" version="8.2p1" extrainfo="Ubuntu 4ubuntu0.5" ostype="Linux" method="probed" conf="10">
+<cpe>cpe:/a:openbsd:openssh:8.2p1</cpe>
+<cpe>cpe:/o:linux:linux_kernel</cpe>
+</service>
+</port>
+<port protocol="tcp" portid="80">
+<state state="open" reason="syn-ack"/>
+<service name="http" product="Apache httpd" version="2.4.49" extrainfo="(Unix) OpenSSL/1.1.1k" method="probed" conf="10">
+<cpe>cpe:/a:apache:http_server:2.4.49</cpe>
+</service>
+</port>
+<port protocol="tcp" portid="3306">
+<state state="open" reason="syn-ack"/>
+<service name="mysql" product="MySQL" version="5.7.31" method="probed" conf="10">
+<cpe>cpe:/a:mysql:mysql:5.7.31</cpe>
+</service>
+</port>
+</ports>
+<times srtt="812" rttvar="120" to="100000"/>
+</host>
+<host starttime="1761556442" endtime="1761556520">
+<status state="up" reason="arp-response"/>
+<address addr="10.10.14.22" addrtype="ipv4"/>
+<ports>
+<port protocol="tcp" portid="6379">
+<state state="open" reason="syn-ack"/>
+<service name="redis" product="Redis key-value store" version="6.0.9" method="probed" conf="10"/>
+</port>
+<port protocol="tcp" portid="8080">
+<state state="open" reason="syn-ack"/>
+<service name="http-proxy" product="Jetty" version="9.4.43" extrainfo="Apache Tomcat" tunnel="ssl" method="probed" conf="10"/>
+</port>
+</ports>
+</host>
+<runstats><finished time="1761556520" timestr="Mon Oct 27 09:15:20 2025" summary="Nmap done" elapsed="78.42"/><hosts up="2" down="0" total="2"/></runstats>
+</nmaprun>

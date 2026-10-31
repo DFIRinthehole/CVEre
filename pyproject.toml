@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cvere"
+version = "1.0.0"
+description = "Feed it an nmap version scan or a CVE ID, get the public PoCs, exploits and exploit intel."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "CVEre" }]
+keywords = ["cve", "nmap", "poc", "exploit", "security", "vulnerability", "osint"]
+dependencies = []
+
+[project.scripts]
+cvere = "cvere.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/cvere/cvere"
+
+[tool.setuptools]
+packages = ["cvere"]
+
+[tool.setuptools.package-data]
+cvere = ["py.typed"]
