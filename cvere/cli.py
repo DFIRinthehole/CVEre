@@ -18,7 +18,7 @@ from .sources import ADAPTERS, DEFAULT_SOURCES, Ctx, run_sources
 from .util import Paint, severity_for
 
 CVE_RE = re.compile(r"^CVE-\d{4}-\d{4,}$", re.I)
-VERSION = "1.0.0"
+VERSION = "1.0.1"
 
 TAGLINE = "nmap / CVE  \u2192  public PoC, exploits & exploit intel"
 
@@ -65,6 +65,8 @@ def build_parser() -> argparse.ArgumentParser:
     g.add_argument("--html", metavar="FILE", help="write standalone HTML report")
     g.add_argument("--refs", type=int, default=0, metavar="N", help="show N NVD reference URLs per CVE")
     g.add_argument("--no-color", action="store_true", help="disable ANSI colours")
+    g.add_argument("--width", type=int, default=None, metavar="N",
+                   help="force output width in columns (default: terminal width, or COLUMNS)")
     g.add_argument("--no-banner", action="store_true", help="don't print the logo banner")
     g.add_argument("--logo", action="store_true", help="print the logo and exit")
     g.add_argument("-q", "--quiet", action="store_true", help="no progress output on stderr")
@@ -98,7 +100,7 @@ class Log:
 
     def __call__(self, msg: str) -> None:
         if not self.quiet:
-            print(self.paint(msg, "grey"), file=sys.stderr, flush=True)
+            print(self.paint(msg, "cyan"), file=sys.stderr, flush=True)
 
     def debug(self, msg: str) -> None:
         if self.verbose:
@@ -242,7 +244,7 @@ def main(argv: list[str] | None = None) -> int:
 
     log = Log(args.quiet, args.verbose, paint)
     if not (args.quiet or args.no_banner):
-        print(logo.render(paint, VERSION, len(sources), TAGLINE) + "\n", file=sys.stderr)
+        print(logo.render(paint, VERSION, len(sources), TAGLINE, width=args.width) + "\n", file=sys.stderr)
 
     try:
         cves, services = gather_inputs(args)
@@ -331,7 +333,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.json == "-":
         log("  (console output suppressed: --json - writes JSON to stdout)")
     else:
-        print(render_console(vulns, services, paint, verbose=args.verbose, show_refs=args.refs), end="")
+        print(render_console(vulns, services, paint, verbose=args.verbose, show_refs=args.refs,
+                             width=args.width), end="")
 
     elapsed = time.time() - t0
     payload = build_payload(vulns, services, sources, elapsed)

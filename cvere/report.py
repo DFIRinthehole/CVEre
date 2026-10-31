@@ -7,7 +7,8 @@ import time
 from typing import Any
 
 from .models import Service, Vuln
-from .util import SEVERITY_STYLE, Paint, fmt_epss, fmt_score, severity_badge, severity_for, truncate
+from .util import (SEVERITY_STYLE, Paint, fmt_epss, fmt_score, severity_badge, severity_for,
+                   term_width, truncate)
 
 SOURCE_ICON = {
     "poc-in-github": "github",
@@ -21,54 +22,86 @@ SOURCE_ICON = {
 
 # --------------------------------------------------------------------------- console
 
-def _rule(paint: Paint, width: int = 92) -> str:
-    return paint("─" * width, "grey")
+def _rule(paint: Paint, width: int) -> str:
+    return paint("\u2500" * min(width, 92), "grey")
 
 
 def render_console(vulns: list[Vuln], services: list[Service], paint: Paint, verbose: bool = False,
-                   show_refs: int = 0) -> str:
+                   show_refs: int = 0, width: int | None = None) -> str:
+    width = max(60, min(width or term_width(), 200))
     out: list[str] = []
     if services:
         out.append(paint("services scanned", "bold"))
         for s in services:
             used = s.resolved[0] if s.resolved else (s.cpes[0] if s.cpes else "")
-            cpe = f"  {paint(used, 'grey')}" if used else ""
-            out.append(f"  · {s.label()}{cpe}")
+            label = s.label()
+            room = width - 4 - (len(used) + 2 if used else 0)
+            out.append(f"  \u00b7 {truncate(label, max(20, room))}" + (f"  {paint(used, 'grey')}" if used else ""))
         out.append("")
 
     if not vulns:
         out.append(paint("No matching CVEs found.", "bgreen"))
         return "\n".join(out)
 
-    # ---- summary table
-    width_id = max(len(v.cve_id) for v in vulns)
+    # ---- summary: two layouts, because a 131-column row wraps on a 100-column terminal
+    idw = max(len(v.cve_id) for v in vulns)
+    compact = width < 118
     out.append(paint(f"{len(vulns)} CVE(s) with data, ranked by CVSS", "bold"))
     for v in vulns:
         sev = severity_for(v.cvss)
-        badge = paint(f"{sev:<22}", *SEVERITY_STYLE.get(sev, ("grey",)))
+        style = SEVERITY_STYLE.get(sev, ("grey",))
+        n_poc = sum(1 for f in v.findings if f.kind in ("poc", "exploit", "template", "module", "lab"))
         flags = []
         if v.kev:
             flags.append(paint("KEV", "bred", "bold"))
-        n_poc = sum(1 for f in v.findings if f.kind in ("poc", "exploit", "template", "module"))
         if n_poc:
             flags.append(paint(f"{n_poc} PoC", "bgreen"))
         flagstr = " ".join(flags)
-        title = truncate(_headline(v), 58)
-        out.append(
-            f"  {paint(v.cve_id.ljust(width_id), 'bold')}  {badge} {fmt_score(v.cvss):>4}  "
-            f"EPSS {fmt_epss(v.epss):>6}  {title:<58} {flagstr}"
-        )
+        head = _headline(v)
+        if compact:
+            line = (f"  {paint(v.cve_id.ljust(idw), 'bold')}  {paint(sev, *style)} "
+                    f"{fmt_score(v.cvss):>4}  EPSS {fmt_epss(v.epss)}")
+            if flagstr:
+                line += "   " + flagstr
+            out.append(line)
+            if head:
+                out.append("    " + paint(truncate(head, width - 4), "grey"))
+        else:
+            prefix = (f"  {v.cve_id.ljust(idw)}  {sev:<22} {fmt_score(v.cvss):>4}  "
+                      f"EPSS {fmt_epss(v.epss):>7}  ")
+            tail = f" {flagstr}" if flagstr else ""
+            tw = max(24, width - len(prefix) - len(tail))
+            row = (f"  {paint(v.cve_id.ljust(idw), 'bold')}  {paint(f"{sev:<22}", *style)} "
+                   f"{fmt_score(v.cvss):>4}  EPSS {fmt_epss(v.epss):>7}  "
+                   f"{truncate(head, tw):<{tw}}")
+            out.append(f"{row}{tail}".rstrip())
     out.append("")
 
     # ---- detail
     for v in vulns:
-        out.append(_rule(paint))
-        out.append(f"{paint(v.cve_id, 'bold', 'bcyan')}  {severity_badge(v.cvss, paint)} {fmt_score(v.cvss)}"
-                   f"{paint(' (CVSS ' + v.cvss_version + ')', 'grey') if v.cvss_version else ''}"
-                   f"   EPSS {fmt_epss(v.epss)}"
-                   + (f"   {paint('⚑ CISA KEV', 'bred', 'bold')}" if v.kev else ""))
+        out.append(_rule(paint, width))
+        # measure, do not predict: build the richest form that still fits
+        def header(ver: bool, kev_text: str = "\u2691 CISA KEV") -> str:
+            ver_s = f" (CVSS {v.cvss_version})" if (ver and v.cvss_version) else ""
+            kev_s = f"   {kev_text}" if v.kev else ""
+            return (f"{v.cve_id}  {v.severity} {fmt_score(v.cvss)}"
+                    f"{ver_s}   EPSS {fmt_epss(v.epss)}{kev_s}")
+
+        plain = header(True)
+        if len(plain) > width:
+            plain = header(False)
+        if len(plain) > width:
+            plain = header(False, "KEV")
+        styled = plain.replace(v.cve_id, paint(v.cve_id, "bold", "bcyan"), 1)
+        styled = styled.replace(v.severity, severity_badge(v.cvss, paint), 1)
+        if "(CVSS" in plain:
+            styled = styled.replace(plain[plain.index(" (CVSS"):plain.index(")") + 1], paint(plain[plain.index(" (CVSS"):plain.index(")") + 1], "grey"), 1)
+        if "\u2691 CISA KEV" in plain:
+            styled = styled.replace("\u2691 CISA KEV", paint("\u2691 CISA KEV", "bred", "bold"), 1)
+        head = styled
+        out.append(head)
         if v.matched:
-            out.append(f"  {paint('matched:', 'grey')} {', '.join(v.matched)}")
+            out.append(f"  {paint('matched:', 'grey')} {truncate(', '.join(v.matched), width - 12)}")
         meta = []
         if v.published:
             meta.append(f"published {v.published}")
@@ -77,13 +110,14 @@ def render_console(vulns: list[Vuln], services: list[Service], paint: Paint, ver
         if v.cvss_vector and len(v.cvss_vector) <= 64:
             meta.append(v.cvss_vector)
         if meta:
-            out.append(f"  {paint(' · '.join(meta), 'grey')}")
+            out.append(f"  {paint(truncate(' \u00b7 '.join(meta), width - 2), 'grey')}")
         if v.kev:
             k = v.kev_info
-            out.append(f"  {paint('KEV:', 'bred')} {k.get('name','')} added {k.get('dateAdded','')}"
-                       f" · ransomware: {k.get('ransomware','Unknown')}")
+            kev = (f"KEV: {k.get('name','')} added {k.get('dateAdded','')}"
+                   f" \u00b7 ransomware: {k.get('ransomware','Unknown')}")
+            out.append(f"  {paint('KEV:', 'bred')} " + _wrap(kev[5:], max(20, width - 7), indent=" " * 7))
         if v.description:
-            out.append("  " + _wrap(v.description, 100, indent="  "))
+            out.append("  " + _wrap(v.description, max(20, width - 4), indent="  "))
 
         if v.findings:
             by_source: dict[str, list] = {}
@@ -93,9 +127,10 @@ def render_console(vulns: list[Vuln], services: list[Service], paint: Paint, ver
             for source, items in order:
                 out.append(f"  {paint(f'[{source}]', 'bblue')} {paint(str(len(items)) + ' hit(s)', 'grey')}")
                 for f in items[:8]:
-                    out.append(_finding_line(f, paint))
+                    out.extend(_finding_lines(f, paint, width))
                 if len(items) > 8:
-                    out.append(f"    {paint(f'… {len(items) - 8} more (JSON/MD report has all)', 'grey')}")
+                    out[-1] += ""
+                    out.append(f"    {paint(f'\u2026 {len(items) - 8} more (JSON/MD report has all)', 'grey')}")
         elif v.source_errors:
             out.append(f"  {paint('no public PoC found', 'yellow')}")
         else:
@@ -103,20 +138,21 @@ def render_console(vulns: list[Vuln], services: list[Service], paint: Paint, ver
 
         if v.source_errors and verbose:
             for src, err in v.source_errors.items():
-                out.append(f"  {paint('! ' + src + ': ' + err, 'grey')}")
+                out.append(f"  {paint(truncate(f'! {src}: {err}', width - 4), 'grey')}")
         if show_refs and v.references:
             out.append(f"  {paint('references:', 'grey')}")
             for r in v.references[:show_refs]:
-                out.append(f"    {paint(r, 'cyan')}")
+                out.append("    " + paint(truncate(r, width - 6), "cyan"))
         out.append("")
 
     return "\n".join(out).rstrip() + "\n"
 
 
-def _finding_line(f, paint: Paint) -> str:
+def _finding_lines(f, paint: Paint, width: int, indent: int = 4) -> list[str]:
+    """One line when it fits, otherwise title above and link below - never a wrapped table cell."""
     extra = []
     if f.meta.get("stars"):
-        extra.append(f"★{f.meta['stars']}")
+        extra.append(f"\u2605{f.meta['stars']}")
     if f.meta.get("rank"):
         extra.append(str(f.meta["rank"]))
     if f.meta.get("severity"):
@@ -126,10 +162,20 @@ def _finding_line(f, paint: Paint) -> str:
     if f.meta.get("also_in"):
         extra.append("also " + "/".join(f.meta["also_in"]))
     tag = paint("(" + " ".join(extra) + ")", "grey") if extra else ""
+    tag_w = len("(" + " ".join(extra) + ") ") if extra else 0
     title = (f.title or "").strip()
+    pad = " " * indent
+    url = f.url
+
     if not title or title.startswith("http"):
-        return f"    {paint(f.url, 'cyan')} {tag}".rstrip()
-    return f"    {truncate(title, 64):<64} {paint(f.url, 'cyan')} {tag}".rstrip()
+        if indent + len(url) + tag_w <= width:
+            return [f"{pad}{paint(url, 'cyan')} {tag}".rstrip()]
+        return [f"{pad}{paint(url, 'cyan')}", f"{pad}{tag}".rstrip()] if tag else [f"{pad}{paint(url, 'cyan')}"]
+
+    room = width - indent - len(url) - tag_w - 2
+    if room >= 24:
+        return [f"{pad}{truncate(title, room):<{room}} {paint(url, 'cyan')} {tag}".rstrip()]
+    return [f"{pad}{truncate(title, width - indent)}", f"{pad}  {paint(url, 'cyan')} {tag}".rstrip()]
 
 
 def _headline(v: Vuln) -> str:
@@ -140,21 +186,31 @@ def _headline(v: Vuln) -> str:
 
 
 def _wrap(text: str, width: int, indent: str = "") -> str:
-    words = text.split()
+    """Greedy wrap that also hard-breaks tokens longer than the line (long DOIs, hashes, URLs)."""
+    width = max(10, width)
+    words = (text or "").split()
     lines: list[str] = []
     cur = ""
     for w in words:
-        if len(cur) + len(w) + 1 > width:
-            lines.append(cur)
+        while len(w) > width:
+            if cur:
+                lines.append(cur)
+                cur = ""
+            lines.append(w[:width])
+            w = w[width:]
+        if not w:
+            continue
+        if len(cur) + len(w) + (1 if cur else 0) > width:
+            if cur:
+                lines.append(cur)
             cur = w
         else:
             cur = f"{cur} {w}".strip()
     if cur:
         lines.append(cur)
-    return ("\n" + indent).join(lines[:6] + (["…"] if len(lines) > 6 else []))
+    body = lines[:6] + (["\u2026"] if len(lines) > 6 else [])
+    return ("\n" + indent).join(body)
 
-
-# --------------------------------------------------------------------------- data
 
 def build_payload(vulns: list[Vuln], services: list[Service], sources: list[str], elapsed: float) -> dict[str, Any]:
     return {

@@ -268,6 +268,14 @@ class TestLogo(unittest.TestCase):
         widths = {len(line) for line in plain().splitlines()}
         self.assertEqual(len(widths), 1)
 
+    def test_tagline_dropped_when_it_would_wrap(self):
+        wide = render(Paint(enabled=False), "1.0.0", 9, width=140)
+        narrow = render(Paint(enabled=False), "1.0.0", 9, width=60)
+        self.assertIn("public PoC", wide)
+        self.assertNotIn("public PoC", narrow)
+        for line in narrow.splitlines():
+            self.assertLessEqual(len(line), 60)
+
     def test_colour_codes_only_when_enabled(self):
         self.assertNotIn("\033", render(Paint(enabled=False), "1.0.0", 3))
         self.assertIn("\033", render(Paint(enabled=True), "1.0.0", 3))
@@ -318,6 +326,37 @@ class TestReport(unittest.TestCase):
         html_out = to_html(payload)
         self.assertIn("<!doctype html>", html_out)
         self.assertIn("exploit-db", html_out)
+
+    def test_console_never_exceeds_terminal_width(self):
+        """The bug from the screenshot: a 131-column summary row on a 100-column terminal."""
+        v = self.make()
+        v.description = "A very long description " * 20
+        v.matched = ["Apache httpd 2.4.49 @ web01.lab.local:80/tcp"]
+        v.findings = [Finding("metasploit", "https://github.com/rapid7/metasploit-framework/blob/master/"
+                                               "modules/auxiliary/scanner/ssl/openssl_heartbleed.rb",
+                              "OpenSSL Heartbleed scanner", meta={"rank": "normal"})]
+        for width in (60, 70, 80, 100, 118, 120, 140, 200):
+            out = render_console([v], [Service(product="Apache httpd", version="2.4.49")],
+                                 Paint(enabled=False), width=width)
+            for line in out.splitlines():
+                if line.strip().startswith("http"):
+                    continue          # URLs are never truncated - copy/paste has to keep working
+                self.assertLessEqual(len(line), width, f"width={width}: {line!r}")
+
+    def test_compact_layout_on_narrow_terminals(self):
+        v = self.make()
+        v.description = "Log4j RCE. Bad."
+        narrow = render_console([v], [], Paint(enabled=False), width=100)
+        wide = render_console([v], [], Paint(enabled=False), width=140)
+        self.assertIn("CVE-2021-44228  CRITICAL 10.0", narrow)               # compact, no padding
+        self.assertIn("CVE-2021-44228  " + "CRITICAL".ljust(22) + " 10.0", wide)  # wide keeps the column
+
+    def test_wrap_breaks_long_tokens(self):
+        from cvere.report import _wrap
+
+        wrapped = _wrap("x" * 300, 40)
+        for line in wrapped.splitlines():
+            self.assertLessEqual(len(line.strip()), 40)
 
     def test_html_escapes(self):
         v = self.make()

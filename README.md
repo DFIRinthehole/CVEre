@@ -14,7 +14,7 @@ public PoC ecosystem and how CVEre covers each tier.
 ██     ██   ██ ██     ██ ██  ██  ██
 ██     ██   ██ █████  ████   █████     nmap / CVE  ->  public PoC, exploits & exploit intel
 ██      ██ ██  ██     ██     ██
- █████   ███   ██████ ██      ████     v1.0.0 - 9 sources
+ █████   ███   ██████ ██      ████     v1.0.1 - 9 sources
 ```
 
 ---
@@ -114,6 +114,7 @@ cvere -n scan.xml --poc-only --min-cvss 7 --json out.json --html report.html --m
 | `--sources a,b` | restrict sources (see below) |
 | `--limit N` | max hits kept per source per CVE (default 20) |
 | `--no-banner` / `--logo` | hide the logo banner / print it and exit |
+| `--width N` | force output width (default: terminal size, or `COLUMNS`) |
 
 ### Exit codes
 
@@ -208,7 +209,7 @@ and controls ordering.
 ## Tests
 
 ```bash
-python3 -m unittest discover -s tests -v   # 37 tests, fully offline
+python3 -m unittest discover -s tests -v   # 41 tests, fully offline
 ```
 
 ## Caveats — read this

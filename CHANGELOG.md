@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.0.1
+
+- **Console output is now terminal-width aware.** The summary row used to be a fixed ~131 columns,
+  which wrapped into garbage on a 100-column terminal (and the findings table lost its alignment).
+  Narrow terminals (< 118 cols) switch to a two-line layout, every column is measured rather than
+  estimated, and long description tokens are hard-wrapped.
+- New `--width N` flag to force a width; `COLUMNS` is honoured.
+- The logo drops its tagline when the terminal is too narrow to hold it.
+- Progress lines on stderr switched from dim grey to cyan - the grey was near-invisible on dark
+  themes.
+- Long URLs are deliberately never truncated, so copy/paste keeps working.
+- 41 offline unit tests, including width-regression tests at 60/70/80/100/118/120/140/200 columns.
+
 ## 1.0.0
 
 First release.

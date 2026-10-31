@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import re
+import shutil
 import sys
 
 # --------------------------------------------------------------------------- colour
@@ -133,3 +134,15 @@ def fmt_epss(epss: float | None) -> str:
 
 def fmt_score(score: float | None) -> str:
     return "-" if score is None else f"{score:.1f}"
+
+
+def term_width(default: int = 100, minimum: int = 60, maximum: int = 200) -> int:
+    """Usable terminal width, honouring COLUMNS and never guessing below `minimum`."""
+    env = os.environ.get("COLUMNS", "")
+    if env.isdigit():
+        return max(minimum, min(int(env), maximum))
+    try:
+        cols = shutil.get_terminal_size((default, 24)).columns
+    except Exception:  # pragma: no cover - some exotic ttys
+        cols = default
+    return max(minimum, min(cols, maximum))

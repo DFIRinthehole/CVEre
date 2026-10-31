@@ -13,7 +13,7 @@ import urllib.parse
 import urllib.request
 from typing import Any
 
-VERSION = "1.0.0"
+VERSION = "1.0.1"
 USER_AGENT = f"cvere/{VERSION} (+https://github.com/cvere)"
 
 
