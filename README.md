@@ -208,7 +208,7 @@ and controls ordering.
 ## Tests
 
 ```bash
-python3 -m unittest discover -s tests -v   # 35 tests, fully offline
+python3 -m unittest discover -s tests -v   # 37 tests, fully offline
 ```
 
 ## Caveats — read this

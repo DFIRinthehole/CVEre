@@ -1,6 +1,6 @@
 # CVEre report
 
-Generated 2026-10-31T13:30:24Z · 20 CVEs · 18 with public PoC · 2 in CISA KEV
+Generated 2026-10-31T13:37:14Z · 20 CVEs · 18 with public PoC · 2 in CISA KEV
 
 ## Services
 
@@ -17,8 +17,8 @@ Generated 2026-10-31T13:30:24Z · 20 CVEs · 18 with public PoC · 2 in CISA KEV
 | CVE | Severity | CVSS | EPSS | KEV | PoCs | Sources |
 |---|---|---|---|---|---|---|
 | [CVE-2025-49844](https://nvd.nist.gov/vuln/detail/CVE-2025-49844) | CRITICAL | 9.9 | 82.6% | - | 31 | poc-in-github, nuclei, trickest |
-| [CVE-2021-41773](https://nvd.nist.gov/vuln/detail/CVE-2021-41773) | CRITICAL | 9.8 | 100.0% | yes | 47 | poc-in-github, exploitdb, metasploit, nuclei, hackerone, vulhub, trickest |
-| [CVE-2021-42013](https://nvd.nist.gov/vuln/detail/CVE-2021-42013) | CRITICAL | 9.8 | 100.0% | yes | 47 | poc-in-github, exploitdb, metasploit, nuclei, hackerone, vulhub, trickest |
+| [CVE-2021-41773](https://nvd.nist.gov/vuln/detail/CVE-2021-41773) | CRITICAL | 9.8 | 100.0% | yes | 48 | poc-in-github, exploitdb, metasploit, nuclei, hackerone, vulhub, trickest |
+| [CVE-2021-42013](https://nvd.nist.gov/vuln/detail/CVE-2021-42013) | CRITICAL | 9.8 | 100.0% | yes | 48 | poc-in-github, exploitdb, metasploit, nuclei, hackerone, vulhub, trickest |
 | [CVE-2021-44790](https://nvd.nist.gov/vuln/detail/CVE-2021-44790) | CRITICAL | 9.8 | 96.8% | - | 22 | poc-in-github, exploitdb, trickest |
 | [CVE-2023-38408](https://nvd.nist.gov/vuln/detail/CVE-2023-38408) | CRITICAL | 9.8 | 79.7% | - | 28 | poc-in-github, trickest |
 | [CVE-2022-22720](https://nvd.nist.gov/vuln/detail/CVE-2022-22720) | CRITICAL | 9.8 | 28.2% | - | 19 | trickest |
@@ -110,6 +110,7 @@ A flaw was found in a change made to path normalization in Apache HTTP Server 2.
 | exploitdb | Apache HTTP Server 2.4.49 - Path Traversal & Remote Code Execution (RCE) | https://www.exploit-db.com/exploits/50383 |
 | exploitdb | Apache HTTP Server 2.4.50 - Remote Code Execution (RCE) (3) | https://www.exploit-db.com/exploits/50512 |
 | metasploit | Apache 2.4.49/2.4.50 Traversal RCE scanner | https://github.com/rapid7/metasploit-framework/blob/master/modules/auxiliary/scanner/http/apache_normalize_path.rb |
+| metasploit | Apache 2.4.49/2.4.50 Traversal RCE | https://github.com/rapid7/metasploit-framework/blob/master/modules/exploit/multi/http/apache_normalize_path_rce.rb |
 | nuclei | Apache 2.4.49 - Path Traversal and Remote Code Execution | https://raw.githubusercontent.com/projectdiscovery/nuclei-templates/main/http/cves/2021/CVE-2021-41773.yaml |
 | hackerone | Internet Bug Bounty — Path Traversal and Remote Code Execution in Apache HTTP Server 2.4.4 | https://hackerone.com/reports/1400238 |
 | hackerone | Internet Bug Bounty — Path traversal and file disclosure vulnerability in Apache HTTP Serv | https://hackerone.com/reports/1394916 |
@@ -170,6 +171,7 @@ It was found that the fix for CVE-2021-41773 in Apache HTTP Server 2.4.50 was in
 | exploitdb | Apache HTTP Server 2.4.50 - Remote Code Execution (RCE) (3) | https://www.exploit-db.com/exploits/50512 |
 | exploitdb | Apache HTTP Server 2.4.50 Path Traversal and Code Execution - Paper | https://www.exploit-db.com/exploits/50552 |
 | metasploit | Apache 2.4.49/2.4.50 Traversal RCE scanner | https://github.com/rapid7/metasploit-framework/blob/master/modules/auxiliary/scanner/http/apache_normalize_path.rb |
+| metasploit | Apache 2.4.49/2.4.50 Traversal RCE | https://github.com/rapid7/metasploit-framework/blob/master/modules/exploit/multi/http/apache_normalize_path_rce.rb |
 | nuclei | Apache 2.4.49/2.4.50 - Path Traversal and Remote Code Execution | https://raw.githubusercontent.com/projectdiscovery/nuclei-templates/main/http/cves/2021/CVE-2021-42013.yaml |
 | hackerone | Internet Bug Bounty — Path Traversal and Remote Code Execution in Apache HTTP Server 2.4.4 | https://hackerone.com/reports/1400238 |
 | vulhub | Vulhub lab: httpd/CVE-2021-42013 | https://github.com/vulhub/vulhub/blob/master/httpd/CVE-2021-42013/README.md |
