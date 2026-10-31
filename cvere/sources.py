@@ -507,8 +507,18 @@ SOURCE_PRIORITY = [
 ]
 
 
-def canonical(url: str) -> str:
-    """Collapse URLs that point at the same thing (repo, EDB entry, ...)."""
+# sources where one repository legitimately holds several distinct artifacts
+PER_ARTIFACT = {"metasploit", "nuclei", "vulhub", "cveslab", "awesome-cve-poc"}
+
+
+def canonical(url: str, source: str = "") -> str:
+    """Collapse URLs that point at the same thing (repo, EDB entry, ...).
+
+    Repo-level sources (a GitHub repo *is* the PoC) collapse to owner/repo, but module and
+    template sources host many independent artifacts under one repo - those keep their full URL.
+    """
+    if source in PER_ARTIFACT:
+        return url.split("?")[0].rstrip("/").lower().replace("http://", "https://")
     m = GH_REPO.match(url)
     if m:
         repo = m.group(2)
@@ -526,7 +536,7 @@ def dedupe_findings(findings: list[Finding]) -> list[Finding]:
     seen: dict[str, Finding] = {}
     out: list[Finding] = []
     for f in ordered:
-        key = canonical(f.url)
+        key = canonical(f.url, f.source)
         if key in seen:
             also = seen[key].meta.setdefault("also_in", [])
             if f.source != seen[key].source and f.source not in also:

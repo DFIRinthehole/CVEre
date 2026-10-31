@@ -131,6 +131,17 @@ class TestSources(unittest.TestCase):
         self.assertEqual(out[0].source, "poc-in-github")
         self.assertEqual(out[0].meta["also_in"], ["trickest"])
 
+    def test_metasploit_modules_are_not_collapsed(self):
+        # many modules live in one repo: they must stay distinct
+        mods = [Finding(source="metasploit", url=f"https://github.com/rapid7/metasploit-framework/blob/master/modules/exploit/x{i}.rb",
+                        title=f"Module {i}") for i in range(3)]
+        self.assertEqual(len(dedupe_findings(mods)), 3)
+
+    def test_repo_level_sources_still_collapse(self):
+        links = [Finding(source="trickest", url="https://github.com/a/b/blob/main/poc.py"),
+                 Finding(source="trickest", url="https://github.com/a/b/tree/main/other")]
+        self.assertEqual(len(dedupe_findings(links)), 1)
+
     def test_unknown_source_is_reported(self):
         ctx = Ctx(Http(cache_dir=tempfile.mkdtemp()), limit=5)
         findings, errors = run_sources(ctx, "CVE-2020-0001", ["nope"])

@@ -1,8 +1,68 @@
+# --------------------------------------------------------------------------- Python
 __pycache__/
 *.py[cod]
-.venv/
+*$py.class
+*.so
+.Python
 build/
 dist/
+develop-eggs/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
 *.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# --------------------------------------------------------------------------- environments
+.venv/
+venv/
+env/
+ENV/
+.python-version
+
+# --------------------------------------------------------------------------- testing & tooling
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.nox/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.hypothesis/
+
+# --------------------------------------------------------------------------- editors & OS
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --------------------------------------------------------------------------- secrets & local config
+.env
+.env.*
+!.env.example
+*.pem
+.netrc
+
+# --------------------------------------------------------------------------- CVEre specifics
+# generated machine-readable reports (the HTML/Markdown demo stays tracked)
 reports/*.json
+# local scan output, caches and throwaway JSON
 *.log
+*.gnmap
+*.nmap
+.cvere-cache/

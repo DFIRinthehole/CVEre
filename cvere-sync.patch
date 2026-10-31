@@ -1,0 +1,370 @@
+diff --git a/.gitattributes b/.gitattributes
+new file mode 100644
+index 0000000..d0d6371
+--- /dev/null
++++ b/.gitattributes
+@@ -0,0 +1,2 @@
++* text=auto eol=lf
++*.png binary
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+new file mode 100644
+index 0000000..aa7b44e
+--- /dev/null
++++ b/.github/workflows/ci.yml
+@@ -0,0 +1,53 @@
++name: ci
++
++on:
++  push:
++    branches: [main]
++  pull_request:
++  workflow_dispatch:
++
++jobs:
++  test:
++    runs-on: ubuntu-latest
++    strategy:
++      fail-fast: false
++      matrix:
++        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
++    steps:
++      - uses: actions/checkout@v4
++      - uses: actions/setup-python@v5
++        with:
++          python-version: ${{ matrix.python-version }}
++      - name: Unit tests (offline)
++        run: python -m unittest discover -s tests -v
++      - name: CLI smoke test (offline, cached fixtures not required)
++        run: |
++          python -m cvere --version
++          python -m cvere --list-sources
++          python -m cvere --logo
++      - name: Parse the example scans
++        run: |
++          python - <<'PY'
++          from cvere import nmap
++          for f in ("examples/scan.xml", "examples/scan.txt"):
++              services = nmap.parse(open(f, encoding="utf-8").read())
++              assert services, f
++              print(f, "->", len(services), "services")
++          PY
++
++  package:
++    runs-on: ubuntu-latest
++    steps:
++      - uses: actions/checkout@v4
++      - uses: actions/setup-python@v5
++        with:
++          python-version: "3.12"
++      - run: pip install build && python -m build
++      - name: Install the wheel and run it
++        run: |
++          pip install dist/*.whl
++          cvere --version
++      - uses: actions/upload-artifact@v4
++        with:
++          name: dist
++          path: dist/*
+diff --git a/.gitignore b/.gitignore
+index 48d73ff..4dbc2bb 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -1,8 +1,68 @@
++# --------------------------------------------------------------------------- Python
+ __pycache__/
+ *.py[cod]
+-.venv/
++*$py.class
++*.so
++.Python
+ build/
+ dist/
++develop-eggs/
++downloads/
++eggs/
++.eggs/
++lib/
++lib64/
++parts/
++sdist/
++var/
++wheels/
++share/python-wheels/
+ *.egg-info/
++.installed.cfg
++*.egg
++MANIFEST
++
++# --------------------------------------------------------------------------- environments
++.venv/
++venv/
++env/
++ENV/
++.python-version
++
++# --------------------------------------------------------------------------- testing & tooling
++.pytest_cache/
++.mypy_cache/
++.ruff_cache/
++.tox/
++.nox/
++.coverage
++.coverage.*
++coverage.xml
++htmlcov/
++.hypothesis/
++
++# --------------------------------------------------------------------------- editors & OS
++.idea/
++.vscode/*
++!.vscode/extensions.json
++*.swp
++*~
++.DS_Store
++Thumbs.db
++desktop.ini
++
++# --------------------------------------------------------------------------- secrets & local config
++.env
++.env.*
++!.env.example
++*.pem
++.netrc
++
++# --------------------------------------------------------------------------- CVEre specifics
++# generated machine-readable reports (the HTML/Markdown demo stays tracked)
+ reports/*.json
++# local scan output, caches and throwaway JSON
+ *.log
++*.gnmap
++*.nmap
++.cvere-cache/
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+new file mode 100644
+index 0000000..40b7ce3
+--- /dev/null
++++ b/CHANGELOG.md
+@@ -0,0 +1,17 @@
++# Changelog
++
++## 1.0.0
++
++First release.
++
++- **Input**: CVE IDs, nmap XML/normal/grepable output (file or stdin), pasted service banners.
++- **Service → CVE mapping**: nmap CPEs, a built-in vendor/product alias table, fuzzy CPE-dictionary
++  search, version fallbacks (`8.2p1` → `8.2`) and per-service `--top` ranking.
++- **Sources (9 by default)**: PoC-in-GitHub, Exploit-DB, Metasploit, nuclei-templates, HackerOne
++  Hacktivity, Vulhub, CVEsLab, awesome-cve-poc, trickest/cve; opt-in GitHub repo search.
++- **Risk context**: NVD CVSS 4.0/3.1/3.0/2.0, CWE, FIRST EPSS, CISA KEV.
++- **Output**: colour console, `--json`, `--md`, standalone `--html` report.
++- **Operational**: gzip HTTP cache with per-source TTL, `--offline`, rate limiting, per-source
++  failure isolation, exit codes for CI (`--fail-on`).
++- **Docs**: `docs/ECOSYSTEM.md` — taxonomy of the public PoC ecosystem and the coverage matrix.
++- 37 offline unit tests, no third-party dependencies.
+diff --git a/LICENSE b/LICENSE
+new file mode 100644
+index 0000000..039404c
+--- /dev/null
++++ b/LICENSE
+@@ -0,0 +1,21 @@
++MIT License
++
++Copyright (c) 2026 CVEre contributors
++
++Permission is hereby granted, free of charge, to any person obtaining a copy
++of this software and associated documentation files (the "Software"), to deal
++in the Software without restriction, including without limitation the rights
++to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
++copies of the Software, and to permit persons to whom the Software is
++furnished to do so, subject to the following conditions:
++
++The above copyright notice and this permission notice shall be included in all
++copies or substantial portions of the Software.
++
++THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
++AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
++OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
++SOFTWARE.
+diff --git a/Makefile b/Makefile
+new file mode 100644
+index 0000000..40a88ed
+--- /dev/null
++++ b/Makefile
+@@ -0,0 +1,14 @@
++.PHONY: test demo html clean
++
++test:
++	python3 -m unittest discover -s tests -v
++
++demo:            ## look up a CVE end to end
++	python3 -m cvere CVE-2021-44228
++
++html:            ## regenerate the demo reports from the example scan
++	python3 -m cvere examples/scan.xml --top 4 -q \
++		--html reports/scan-report.html --md reports/scan-report.md --json reports/scan-report.json
++
++clean:
++	rm -rf __pycache__ */__pycache__ build dist *.egg-info .venv
+diff --git a/README.md b/README.md
+index 07fcc09..eb647f1 100644
+--- a/README.md
++++ b/README.md
+@@ -208,7 +208,7 @@ and controls ordering.
+ ## Tests
+ 
+ ```bash
+-python3 -m unittest discover -s tests -v   # 35 tests, fully offline
++python3 -m unittest discover -s tests -v   # 37 tests, fully offline
+ ```
+ 
+ ## Caveats — read this
+diff --git a/bin/cvere b/bin/cvere
+old mode 100644
+new mode 100755
+diff --git a/cvere/py.typed b/cvere/py.typed
+new file mode 100644
+index 0000000..e69de29
+diff --git a/cvere/sources.py b/cvere/sources.py
+index d7fca76..ed98314 100644
+--- a/cvere/sources.py
++++ b/cvere/sources.py
+@@ -507,8 +507,18 @@ SOURCE_PRIORITY = [
+ ]
+ 
+ 
+-def canonical(url: str) -> str:
+-    """Collapse URLs that point at the same thing (repo, EDB entry, ...)."""
++# sources where one repository legitimately holds several distinct artifacts
++PER_ARTIFACT = {"metasploit", "nuclei", "vulhub", "cveslab", "awesome-cve-poc"}
++
++
++def canonical(url: str, source: str = "") -> str:
++    """Collapse URLs that point at the same thing (repo, EDB entry, ...).
++
++    Repo-level sources (a GitHub repo *is* the PoC) collapse to owner/repo, but module and
++    template sources host many independent artifacts under one repo - those keep their full URL.
++    """
++    if source in PER_ARTIFACT:
++        return url.split("?")[0].rstrip("/").lower().replace("http://", "https://")
+     m = GH_REPO.match(url)
+     if m:
+         repo = m.group(2)
+@@ -526,7 +536,7 @@ def dedupe_findings(findings: list[Finding]) -> list[Finding]:
+     seen: dict[str, Finding] = {}
+     out: list[Finding] = []
+     for f in ordered:
+-        key = canonical(f.url)
++        key = canonical(f.url, f.source)
+         if key in seen:
+             also = seen[key].meta.setdefault("also_in", [])
+             if f.source != seen[key].source and f.source not in also:
+diff --git a/reports/scan-report.html b/reports/scan-report.html
+index dd625d6..4d45aa7 100644
+--- a/reports/scan-report.html
++++ b/reports/scan-report.html
+@@ -44,8 +44,8 @@
+ </style></head>
+ <body><div class="wrap">
+   <h1>CVE<span>re</span> report</h1>
+-  <div class="sub">Generated 2026-10-31T13:30:24Z · sources: poc-in-github, exploitdb, metasploit, nuclei, hackerone, vulhub, cveslab, awesome-cve-poc, trickest
+-    · 19.65s</div>
++  <div class="sub">Generated 2026-10-31T13:37:14Z · sources: poc-in-github, exploitdb, metasploit, nuclei, hackerone, vulhub, cveslab, awesome-cve-poc, trickest
++    · 1.73s</div>
+   <div class="kpis">
+     <div class="kpi"><b>20</b><small>CVEs</small></div>
+     <div class="kpi"><b style="color:#ff4d6d">8</b><small>critical</small></div>
+@@ -72,25 +72,25 @@
+         <header>
+           <a class="cve" href="https://nvd.nist.gov/vuln/detail/CVE-2021-41773" target="_blank" rel="noopener">CVE-2021-41773</a>
+           <span class="score" style="color:#ff4d6d">9.8</span>
+-          <span class="badge" style="background:#ff4d6d22;color:#ff4d6d;border:1px solid #ff4d6d55">CRITICAL</span><span class="badge" style="background:#ff4d6d22;color:#ff4d6d;border:1px solid #ff4d6d55">CISA KEV</span><span class="badge" style="background:#4ade8022;color:#4ade80;border:1px solid #4ade8055">47 PoC</span>
++          <span class="badge" style="background:#ff4d6d22;color:#ff4d6d;border:1px solid #ff4d6d55">CRITICAL</span><span class="badge" style="background:#ff4d6d22;color:#ff4d6d;border:1px solid #ff4d6d55">CISA KEV</span><span class="badge" style="background:#4ade8022;color:#4ade80;border:1px solid #4ade8055">48 PoC</span>
+           <span class="stats">EPSS 100.0%
+             · published 2021-10-05</span>
+         </header>
+         <div class="matched">matched: Apache httpd 2.4.49 @ web01.lab.local:80/tcp</div>
+         <p class="desc">A flaw was found in a change made to path normalization in Apache HTTP Server 2.4.49. An attacker could use a path traversal attack to map URLs to files outside the directories configured by Alias-like directives. If files outside of these directories are not protected by the usual default configuration &quot;require all denied&quot;, these requests can succeed. If CGI scripts are also enabled for these aliased pathes, this could allow for remote code execution. This issue is known to be exploited in the wild. This issue only affects Apache 2.4.49 and not earlier versions. The fix in Apache HTTP Server </p>
+-        <ul class="findings"><li><a href="https://github.com/thehackersbrain/CVE-2021-41773" target="_blank" rel="noopener">thehackersbrain/CVE-2021-41773</a><span class="src">poc-in-github</span><span class=meta>51</span></li><li><a href="https://github.com/theLSA/apache-httpd-path-traversal-checker" target="_blank" rel="noopener">theLSA/apache-httpd-path-traversal-checker</a><span class="src">poc-in-github</span><span class=meta>7</span></li><li><a href="https://github.com/Hydragyrum/CVE-2021-41773-Playground" target="_blank" rel="noopener">Hydragyrum/CVE-2021-41773-Playground</a><span class="src">poc-in-github</span><span class=meta>5</span></li><li><a href="https://github.com/blackn0te/Apache-HTTP-Server-2.4.49-2.4.50-Path-Traversal-Remote-Code-Execution" target="_blank" rel="noopener">blackn0te/Apache-HTTP-Server-2.4.49-2.4.50-Path-Traversal-Remote-Code-Execution</a><span class="src">poc-in-github</span><span class=meta>2</span></li><li><a href="https://github.com/iosifache/ApacheRCEEssay" target="_blank" rel="noopener">iosifache/ApacheRCEEssay</a><span class="src">poc-in-github</span><span class=meta>2</span></li><li><a href="https://github.com/wangfly-me/Apache_Penetration_Tool" target="_blank" rel="noopener">wangfly-me/Apache_Penetration_Tool</a><span class="src">poc-in-github</span><span class=meta>2</span></li><li><a href="https://github.com/Soliux/CVE-2021-41773" target="_blank" rel="noopener">Soliux/CVE-2021-41773</a><span class="src">poc-in-github</span><span class=meta>2</span></li><li><a href="https://github.com/mr-exo/CVE-2021-41773" target="_blank" rel="noopener">mr-exo/CVE-2021-41773</a><span class="src">poc-in-github</span><span class=meta>2</span></li><li><a href="https://github.com/cloudbyteelias/CVE-2021-41773" target="_blank" rel="noopener">cloudbyteelias/CVE-2021-41773</a><span class="src">poc-in-github</span><span class=meta>2</span></li><li><a href="https://github.com/ksanchezcld/httpd-2.4.49" target="_blank" rel="noopener">ksanchezcld/httpd-2.4.49</a><span class="src">poc-in-github</span><span class=meta>2</span></li><li><a href="https://github.com/wvverez/CVE-2021-41773-PoC" target="_blank" rel="noopener">wvverez/CVE-2021-41773-PoC</a><span class="src">poc-in-github</span><span class=meta>1</span></li><li><a href="https://github.com/nwclasantha/Apache_2.4.29_Exploit" target="_blank" rel="noopener">nwclasantha/Apache_2.4.29_Exploit</a><span class="src">poc-in-github</span><span class=meta>1</span></li><li><a href="https://github.com/Zyx2440/Apache-HTTP-Server-2.4.50-RCE" target="_blank" rel="noopener">Zyx2440/Apache-HTTP-Server-2.4.50-RCE</a><span class="src">poc-in-github</span><span class=meta>1</span></li><li><a href="https://github.com/belajarqywok/cve-2021-41773-msf" target="_blank" rel="noopener">belajarqywok/cve-2021-41773-msf</a><span class="src">poc-in-github</span><span class=meta>1</span></li><li><a href="https://github.com/OfriOuzan/CVE-2021-41773_CVE-2021-42013_Exploits" target="_blank" rel="noopener">OfriOuzan/CVE-2021-41773_CVE-2021-42013_Exploits</a><span class="src">poc-in-github</span><span class=meta>1</span></li><li><a href="https://github.com/aqiao-jashell/py-CVE-2021-41773" target="_blank" rel="noopener">aqiao-jashell/py-CVE-2021-41773</a><span class="src">poc-in-github</span><span class=meta>1</span></li><li><a href="https://github.com/aqiao-jashell/CVE-2021-41773" target="_blank" rel="noopener">aqiao-jashell/CVE-2021-41773</a><span class="src">poc-in-github</span><span class=meta>1</span></li><li><a href="https://github.com/CalfCrusher/Path-traversal-RCE-Apache-2.4.49-2.4.50-Exploit" target="_blank" rel="noopener">CalfCrusher/Path-traversal-RCE-Apache-2.4.49-2.4.50-Exploit</a><span class="src">poc-in-github</span><span class=meta>1</span></li><li><a href="https://github.com/mauricelambert/CVE-2021-41773" target="_blank" rel="noopener">mauricelambert/CVE-2021-41773</a><span class="src">poc-in-github</span><span class=meta>1</span></li><li><a href="https://github.com/vulf/CVE-2021-41773_42013" target="_blank" rel="noopener">vulf/CVE-2021-41773_42013</a><span class="src">poc-in-github</span><span class=meta>1</span></li><li><a href="https://www.exploit-db.com/exploits/50383" target="_blank" rel="noopener">Apache HTTP Server 2.4.49 - Path Traversal &amp; Remote Code Execution (RCE)</a><span class="src">exploitdb</span><span class=meta>2021-10-06</span></li><li><a href="https://www.exploit-db.com/exploits/50512" target="_blank" rel="noopener">Apache HTTP Server 2.4.50 - Remote Code Execution (RCE) (3)</a><span class="src">exploitdb</span><span class=meta>2021-11-11</span></li><li><a href="https://github.com/rapid7/metasploit-framework/blob/master/modules/auxiliary/scanner/http/apache_normalize_path.rb" target="_blank" rel="noopener">Apache 2.4.49/2.4.50 Traversal RCE scanner</a><span class="src">metasploit</span><span class=meta>normal · 2021-05-10</span></li><li><a href="https://raw.githubusercontent.com/projectdiscovery/nuclei-templates/main/http/cves/2021/CVE-2021-41773.yaml" target="_blank" rel="noopener">Apache 2.4.49 - Path Traversal and Remote Code Execution</a><span class="src">nuclei</span><span class=meta>high</span></li><li><a href="https://hackerone.com/reports/1400238" target="_blank" rel="noopener">Internet Bug Bounty — Path Traversal and Remote Code Execution in Apache HTTP Server 2.4.49 and 2.4.50 (incomp</a><span class="src">hackerone</span><span class=meta>Critical · 2021-11-19</span></li><li><a href="https://hackerone.com/reports/1394916" target="_blank" rel="noopener">Internet Bug Bounty — Path traversal and file disclosure vulnerability in Apache HTTP Server 2.4.49</a><span class="src">hackerone</span><span class=meta>Critical · 2021-11-09</span></li><li><a href="https://github.com/vulhub/vulhub/blob/master/httpd/CVE-2021-41773/README.md" target="_blank" rel="noopener">Vulhub lab: httpd/CVE-2021-41773</a><span class="src">vulhub</span></li><li><a href="https://github.com/0day666/Vulnerability-verification" target="_blank" rel="noopener">https://github.com/0day666/Vulnerability-verification</a><span class="src">trickest</span></li><li><a href="https://github.com/0e0w/GoHackTools" target="_blank" rel="noopener">https://github.com/0e0w/GoHackTools</a><span class="src">trickest</span></li><li><a href="https://github.com/0x3n0/redeam" target="_blank" rel="noopener">https://github.com/0x3n0/redeam</a><span class="src">trickest</span></li><li><a href="https://github.com/0x783kb/Security-operation-book" target="_blank" rel="noopener">https://github.com/0x783kb/Security-operation-book</a><span class="src">trickest</span></li><li><a href="https://github.com/0xAlmighty/CVE-2021-41773-PoC" target="_blank" rel="noopener">https://github.com/0xAlmighty/CVE-2021-41773-PoC</a><span class="src">trickest</span></li><li><a href="https://github.com/0xGabe/Apache-CVEs" target="_blank" rel="noopener">https://github.com/0xGabe/Apache-CVEs</a><span class="src">trickest</span></li><li><a href="https://github.com/0xIceKing/dfcf_def_atk_2024" target="_blank" rel="noopener">https://github.com/0xIceKing/dfcf_def_atk_2024</a><span class="src">trickest</span></li><li><a href="https://github.com/0xRar/CVE-2021-41773" target="_blank" rel="noopener">https://github.com/0xRar/CVE-2021-41773</a><span class="src">trickest</span></li><li><a href="https://github.com/0xStrygwyr/OSCP-Guide" target="_blank" rel="noopener">https://github.com/0xStrygwyr/OSCP-Guide</a><span class="src">trickest</span></li><li><a href="https://github.com/0xZipp0/OSCP" target="_blank" rel="noopener">https://github.com/0xZipp0/OSCP</a><span class="src">trickest</span></li><li><a href="https://github.com/0xabdoulaye/CTFs-Journey" target="_blank" rel="noopener">https://github.com/0xabdoulaye/CTFs-Journey</a><span class="src">trickest</span></li><li><a href="https://github.com/0xb0rn3/r3cond0g" target="_blank" rel="noopener">https://github.com/0xb0rn3/r3cond0g</a><span class="src">trickest</span></li><li><a href="https://github.com/0xc4t/CVE-2021-41773" target="_blank" rel="noopener">https://github.com/0xc4t/CVE-2021-41773</a><span class="src">trickest</span></li><li><a href="https://github.com/0xfke/500-free-TryHackMe-rooms" target="_blank" rel="noopener">https://github.com/0xfke/500-free-TryHackMe-rooms</a><span class="src">trickest</span></li><li><a href="https://github.com/0xkarthi/Tryhackme-Roadmap" target="_blank" rel="noopener">https://github.com/0xkarthi/Tryhackme-Roadmap</a><span class="src">trickest</span></li><li><a href="https://github.com/0xneobyte/TryHackMe-Learning-Path-From-Beginner-to-Expert" target="_blank" rel="noopener">https://github.com/0xneobyte/TryHackMe-Learning-Path-From-Beginner-to-Expert</a><span class="src">trickest</span></li><li><a href="https://github.com/0xsyr0/OSCP" target="_blank" rel="noopener">https://github.com/0xsyr0/OSCP</a><span class="src">trickest</span></li><li><a href="https://github.com/11x-singhamit/Port-Scanner-with-Vulnerability-Awareness" target="_blank" rel="noopener">https://github.com/11x-singhamit/Port-Scanner-with-Vulnerability-Awareness</a><span class="src">trickest</span></li><li><a href="https://github.com/12345qwert123456/CVE-2021-41773" target="_blank" rel="noopener">https://github.com/12345qwert123456/CVE-2021-41773</a><span class="src">trickest</span></li><li><a href="https://github.com/189569400/Meppo" target="_blank" rel="noopener">https://github.com/189569400/Meppo</a><span class="src">trickest</span></li></ul>
++        <ul class="findings"><li><a href="https://github.com/thehackersbrain/CVE-2021-41773" target="_blank" rel="noopener">thehackersbrain/CVE-2021-41773</a><span class="src">poc-in-github</span><span class=meta>51</span></li><li><a href="https://github.com/theLSA/apache-httpd-path-traversal-checker" target="_blank" rel="noopener">theLSA/apache-httpd-path-traversal-checker</a><span class="src">poc-in-github</span><span class=meta>7</span></li><li><a href="https://github.com/Hydragyrum/CVE-2021-41773-Playground" target="_blank" rel="noopener">Hydragyrum/CVE-2021-41773-Playground</a><span class="src">poc-in-github</span><span class=meta>5</span></li><li><a href="https://github.com/blackn0te/Apache-HTTP-Server-2.4.49-2.4.50-Path-Traversal-Remote-Code-Execution" target="_blank" rel="noopener">blackn0te/Apache-HTTP-Server-2.4.49-2.4.50-Path-Traversal-Remote-Code-Execution</a><span class="src">poc-in-github</span><span class=meta>2</span></li><li><a href="https://github.com/iosifache/ApacheRCEEssay" target="_blank" rel="noopener">iosifache/ApacheRCEEssay</a><span class="src">poc-in-github</span><span class=meta>2</span></li><li><a href="https://github.com/wangfly-me/Apache_Penetration_Tool" target="_blank" rel="noopener">wangfly-me/Apache_Penetration_Tool</a><span class="src">poc-in-github</span><span class=meta>2</span></li><li><a href="https://github.com/Soliux/CVE-2021-41773" target="_blank" rel="noopener">Soliux/CVE-2021-41773</a><span class="src">poc-in-github</span><span class=meta>2</span></li><li><a href="https://github.com/mr-exo/CVE-2021-41773" target="_blank" rel="noopener">mr-exo/CVE-2021-41773</a><span class="src">poc-in-github</span><span class=meta>2</span></li><li><a href="https://github.com/cloudbyteelias/CVE-2021-41773" target="_blank" rel="noopener">cloudbyteelias/CVE-2021-41773</a><span class="src">poc-in-github</span><span class=meta>2</span></li><li><a href="https://github.com/ksanchezcld/httpd-2.4.49" target="_blank" rel="noopener">ksanchezcld/httpd-2.4.49</a><span class="src">poc-in-github</span><span class=meta>2</span></li><li><a href="https://github.com/wvverez/CVE-2021-41773-PoC" target="_blank" rel="noopener">wvverez/CVE-2021-41773-PoC</a><span class="src">poc-in-github</span><span class=meta>1</span></li><li><a href="https://github.com/nwclasantha/Apache_2.4.29_Exploit" target="_blank" rel="noopener">nwclasantha/Apache_2.4.29_Exploit</a><span class="src">poc-in-github</span><span class=meta>1</span></li><li><a href="https://github.com/Zyx2440/Apache-HTTP-Server-2.4.50-RCE" target="_blank" rel="noopener">Zyx2440/Apache-HTTP-Server-2.4.50-RCE</a><span class="src">poc-in-github</span><span class=meta>1</span></li><li><a href="https://github.com/belajarqywok/cve-2021-41773-msf" target="_blank" rel="noopener">belajarqywok/cve-2021-41773-msf</a><span class="src">poc-in-github</span><span class=meta>1</span></li><li><a href="https://github.com/OfriOuzan/CVE-2021-41773_CVE-2021-42013_Exploits" target="_blank" rel="noopener">OfriOuzan/CVE-2021-41773_CVE-2021-42013_Exploits</a><span class="src">poc-in-github</span><span class=meta>1</span></li><li><a href="https://github.com/aqiao-jashell/py-CVE-2021-41773" target="_blank" rel="noopener">aqiao-jashell/py-CVE-2021-41773</a><span class="src">poc-in-github</span><span class=meta>1</span></li><li><a href="https://github.com/aqiao-jashell/CVE-2021-41773" target="_blank" rel="noopener">aqiao-jashell/CVE-2021-41773</a><span class="src">poc-in-github</span><span class=meta>1</span></li><li><a href="https://github.com/CalfCrusher/Path-traversal-RCE-Apache-2.4.49-2.4.50-Exploit" target="_blank" rel="noopener">CalfCrusher/Path-traversal-RCE-Apache-2.4.49-2.4.50-Exploit</a><span class="src">poc-in-github</span><span class=meta>1</span></li><li><a href="https://github.com/mauricelambert/CVE-2021-41773" target="_blank" rel="noopener">mauricelambert/CVE-2021-41773</a><span class="src">poc-in-github</span><span class=meta>1</span></li><li><a href="https://github.com/vulf/CVE-2021-41773_42013" target="_blank" rel="noopener">vulf/CVE-2021-41773_42013</a><span class="src">poc-in-github</span><span class=meta>1</span></li><li><a href="https://www.exploit-db.com/exploits/50383" target="_blank" rel="noopener">Apache HTTP Server 2.4.49 - Path Traversal &amp; Remote Code Execution (RCE)</a><span class="src">exploitdb</span><span class=meta>2021-10-06</span></li><li><a href="https://www.exploit-db.com/exploits/50512" target="_blank" rel="noopener">Apache HTTP Server 2.4.50 - Remote Code Execution (RCE) (3)</a><span class="src">exploitdb</span><span class=meta>2021-11-11</span></li><li><a href="https://github.com/rapid7/metasploit-framework/blob/master/modules/auxiliary/scanner/http/apache_normalize_path.rb" target="_blank" rel="noopener">Apache 2.4.49/2.4.50 Traversal RCE scanner</a><span class="src">metasploit</span><span class=meta>normal · 2021-05-10</span></li><li><a href="https://github.com/rapid7/metasploit-framework/blob/master/modules/exploit/multi/http/apache_normalize_path_rce.rb" target="_blank" rel="noopener">Apache 2.4.49/2.4.50 Traversal RCE</a><span class="src">metasploit</span><span class=meta>excellent · 2021-05-10</span></li><li><a href="https://raw.githubusercontent.com/projectdiscovery/nuclei-templates/main/http/cves/2021/CVE-2021-41773.yaml" target="_blank" rel="noopener">Apache 2.4.49 - Path Traversal and Remote Code Execution</a><span class="src">nuclei</span><span class=meta>high</span></li><li><a href="https://hackerone.com/reports/1400238" target="_blank" rel="noopener">Internet Bug Bounty — Path Traversal and Remote Code Execution in Apache HTTP Server 2.4.49 and 2.4.50 (incomp</a><span class="src">hackerone</span><span class=meta>Critical · 2021-11-19</span></li><li><a href="https://hackerone.com/reports/1394916" target="_blank" rel="noopener">Internet Bug Bounty — Path traversal and file disclosure vulnerability in Apache HTTP Server 2.4.49</a><span class="src">hackerone</span><span class=meta>Critical · 2021-11-09</span></li><li><a href="https://github.com/vulhub/vulhub/blob/master/httpd/CVE-2021-41773/README.md" target="_blank" rel="noopener">Vulhub lab: httpd/CVE-2021-41773</a><span class="src">vulhub</span></li><li><a href="https://github.com/0day666/Vulnerability-verification" target="_blank" rel="noopener">https://github.com/0day666/Vulnerability-verification</a><span class="src">trickest</span></li><li><a href="https://github.com/0e0w/GoHackTools" target="_blank" rel="noopener">https://github.com/0e0w/GoHackTools</a><span class="src">trickest</span></li><li><a href="https://github.com/0x3n0/redeam" target="_blank" rel="noopener">https://github.com/0x3n0/redeam</a><span class="src">trickest</span></li><li><a href="https://github.com/0x783kb/Security-operation-book" target="_blank" rel="noopener">https://github.com/0x783kb/Security-operation-book</a><span class="src">trickest</span></li><li><a href="https://github.com/0xAlmighty/CVE-2021-41773-PoC" target="_blank" rel="noopener">https://github.com/0xAlmighty/CVE-2021-41773-PoC</a><span class="src">trickest</span></li><li><a href="https://github.com/0xGabe/Apache-CVEs" target="_blank" rel="noopener">https://github.com/0xGabe/Apache-CVEs</a><span class="src">trickest</span></li><li><a href="https://github.com/0xIceKing/dfcf_def_atk_2024" target="_blank" rel="noopener">https://github.com/0xIceKing/dfcf_def_atk_2024</a><span class="src">trickest</span></li><li><a href="https://github.com/0xRar/CVE-2021-41773" target="_blank" rel="noopener">https://github.com/0xRar/CVE-2021-41773</a><span class="src">trickest</span></li><li><a href="https://github.com/0xStrygwyr/OSCP-Guide" target="_blank" rel="noopener">https://github.com/0xStrygwyr/OSCP-Guide</a><span class="src">trickest</span></li><li><a href="https://github.com/0xZipp0/OSCP" target="_blank" rel="noopener">https://github.com/0xZipp0/OSCP</a><span class="src">trickest</span></li><li><a href="https://github.com/0xabdoulaye/CTFs-Journey" target="_blank" rel="noopener">https://github.com/0xabdoulaye/CTFs-Journey</a><span class="src">trickest</span></li><li><a href="https://github.com/0xb0rn3/r3cond0g" target="_blank" rel="noopener">https://github.com/0xb0rn3/r3cond0g</a><span class="src">trickest</span></li><li><a href="https://github.com/0xc4t/CVE-2021-41773" target="_blank" rel="noopener">https://github.com/0xc4t/CVE-2021-41773</a><span class="src">trickest</span></li><li><a href="https://github.com/0xfke/500-free-TryHackMe-rooms" target="_blank" rel="noopener">https://github.com/0xfke/500-free-TryHackMe-rooms</a><span class="src">trickest</span></li><li><a href="https://github.com/0xkarthi/Tryhackme-Roadmap" target="_blank" rel="noopener">https://github.com/0xkarthi/Tryhackme-Roadmap</a><span class="src">trickest</span></li><li><a href="https://github.com/0xneobyte/TryHackMe-Learning-Path-From-Beginner-to-Expert" target="_blank" rel="noopener">https://github.com/0xneobyte/TryHackMe-Learning-Path-From-Beginner-to-Expert</a><span class="src">trickest</span></li><li><a href="https://github.com/0xsyr0/OSCP" target="_blank" rel="noopener">https://github.com/0xsyr0/OSCP</a><span class="src">trickest</span></li><li><a href="https://github.com/11x-singhamit/Port-Scanner-with-Vulnerability-Awareness" target="_blank" rel="noopener">https://github.com/11x-singhamit/Port-Scanner-with-Vulnerability-Awareness</a><span class="src">trickest</span></li><li><a href="https://github.com/12345qwert123456/CVE-2021-41773" target="_blank" rel="noopener">https://github.com/12345qwert123456/CVE-2021-41773</a><span class="src">trickest</span></li><li><a href="https://github.com/189569400/Meppo" target="_blank" rel="noopener">https://github.com/189569400/Meppo</a><span class="src">trickest</span></li></ul>
+       </article>
+       <article class="card" style="border-left-color:#ff4d6d">
+         <header>
+           <a class="cve" href="https://nvd.nist.gov/vuln/detail/CVE-2021-42013" target="_blank" rel="noopener">CVE-2021-42013</a>
+           <span class="score" style="color:#ff4d6d">9.8</span>
+-          <span class="badge" style="background:#ff4d6d22;color:#ff4d6d;border:1px solid #ff4d6d55">CRITICAL</span><span class="badge" style="background:#ff4d6d22;color:#ff4d6d;border:1px solid #ff4d6d55">CISA KEV</span><span class="badge" style="background:#4ade8022;color:#4ade80;border:1px solid #4ade8055">47 PoC</span>
++          <span class="badge" style="background:#ff4d6d22;color:#ff4d6d;border:1px solid #ff4d6d55">CRITICAL</span><span class="badge" style="background:#ff4d6d22;color:#ff4d6d;border:1px solid #ff4d6d55">CISA KEV</span><span class="badge" style="background:#4ade8022;color:#4ade80;border:1px solid #4ade8055">48 PoC</span>
+           <span class="stats">EPSS 100.0%
+             · published 2021-10-07</span>
+         </header>
+         <div class="matched">matched: Apache httpd 2.4.49 @ web01.lab.local:80/tcp</div>
+         <p class="desc">It was found that the fix for CVE-2021-41773 in Apache HTTP Server 2.4.50 was insufficient. An attacker could use a path traversal attack to map URLs to files outside the directories configured by Alias-like directives. If files outside of these directories are not protected by the usual default configuration &quot;require all denied&quot;, these requests can succeed. If CGI scripts are also enabled for these aliased pathes, this could allow for remote code execution. This issue only affects Apache 2.4.49 and Apache 2.4.50 and not earlier versions.</p>
+-        <ul class="findings"><li><a href="https://github.com/tangxiaofeng7/CVE-2022-22947-Spring-Cloud-Gateway" target="_blank" rel="noopener">tangxiaofeng7/CVE-2022-22947-Spring-Cloud-Gateway</a><span class="src">poc-in-github</span><span class=meta>53</span></li><li><a href="https://github.com/Vulnmachines/cve-2021-42013" target="_blank" rel="noopener">Vulnmachines/cve-2021-42013</a><span class="src">poc-in-github</span><span class=meta>18</span></li><li><a href="https://github.com/asaotomo/CVE-2021-42013-Apache-RCE-Poc-Exp" target="_blank" rel="noopener">asaotomo/CVE-2021-42013-Apache-RCE-Poc-Exp</a><span class="src">poc-in-github</span><span class=meta>9</span></li><li><a href="https://github.com/andrea-mattioli/apache-exploit-CVE-2021-42013" target="_blank" rel="noopener">andrea-mattioli/apache-exploit-CVE-2021-42013</a><span class="src">poc-in-github</span><span class=meta>9</span></li><li><a href="https://github.com/walnutsecurity/cve-2021-42013" target="_blank" rel="noopener">walnutsecurity/cve-2021-42013</a><span class="src">poc-in-github</span><span class=meta>4</span></li><li><a href="https://github.com/TheLastVvV/CVE-2021-42013_Reverse-Shell" target="_blank" rel="noopener">TheLastVvV/CVE-2021-42013_Reverse-Shell</a><span class="src">poc-in-github</span><span class=meta>4</span></li><li><a href="https://github.com/TheLastVvV/CVE-2021-42013" target="_blank" rel="noopener">TheLastVvV/CVE-2021-42013</a><span class="src">poc-in-github</span><span class=meta>2</span></li><li><a href="https://github.com/mauricelambert/CVE-2021-42013" target="_blank" rel="noopener">mauricelambert/CVE-2021-42013</a><span class="src">poc-in-github</span><span class=meta>1</span></li><li><a href="https://github.com/jas9reet/CVE-2021-42013-LAB" target="_blank" rel="noopener">jas9reet/CVE-2021-42013-LAB</a><span class="src">poc-in-github</span><span class=meta>1</span></li><li><a href="https://github.com/robotsense1337/CVE-2021-42013" target="_blank" rel="noopener">robotsense1337/CVE-2021-42013</a><span class="src">poc-in-github</span><span class=meta>1</span></li><li><a href="https://github.com/CyberCTF/vulhub-httpd-cve-2021-42013" target="_blank" rel="noopener">CyberCTF/vulhub-httpd-cve-2021-42013</a><span class="src">poc-in-github</span></li><li><a href="https://github.com/berraesen/apache-cve-2021-42013-lab" target="_blank" rel="noopener">berraesen/apache-cve-2021-42013-lab</a><span class="src">poc-in-github</span></li><li><a href="https://github.com/lmcewen9/cve-2021-42013" target="_blank" rel="noopener">lmcewen9/cve-2021-42013</a><span class="src">poc-in-github</span></li><li><a href="https://github.com/zeynepglygt/apache-cve-2021-42013-rce" target="_blank" rel="noopener">zeynepglygt/apache-cve-2021-42013-rce</a><span class="src">poc-in-github</span></li><li><a href="https://github.com/drackyjr/CVE-2021-42013" target="_blank" rel="noopener">drackyjr/CVE-2021-42013</a><span class="src">poc-in-github</span></li><li><a href="https://github.com/FakhriCRD/Apache-CVE-2021-42013-RCE-Exploit" target="_blank" rel="noopener">FakhriCRD/Apache-CVE-2021-42013-RCE-Exploit</a><span class="src">poc-in-github</span></li><li><a href="https://github.com/Makavellik/POC-CVE-2021-42013-EXPLOIT" target="_blank" rel="noopener">Makavellik/POC-CVE-2021-42013-EXPLOIT</a><span class="src">poc-in-github</span></li><li><a href="https://github.com/Jhonsonwannaa/cve-2021-42013-apache" target="_blank" rel="noopener">Jhonsonwannaa/cve-2021-42013-apache</a><span class="src">poc-in-github</span></li><li><a href="https://github.com/rafifdna/CVE-2021-42013" target="_blank" rel="noopener">rafifdna/CVE-2021-42013</a><span class="src">poc-in-github</span></li><li><a href="https://github.com/BassoNicolas/CVE-2021-42013" target="_blank" rel="noopener">BassoNicolas/CVE-2021-42013</a><span class="src">poc-in-github</span></li><li><a href="https://www.exploit-db.com/exploits/50406" target="_blank" rel="noopener">Apache HTTP Server 2.4.50 - Path Traversal &amp; Remote Code Execution (RCE)</a><span class="src">exploitdb</span><span class=meta>2021-10-13</span></li><li><a href="https://www.exploit-db.com/exploits/50446" target="_blank" rel="noopener">Apache HTTP Server 2.4.50 - Remote Code Execution (RCE) (2)</a><span class="src">exploitdb</span><span class=meta>2021-10-25</span></li><li><a href="https://www.exploit-db.com/exploits/50512" target="_blank" rel="noopener">Apache HTTP Server 2.4.50 - Remote Code Execution (RCE) (3)</a><span class="src">exploitdb</span><span class=meta>2021-11-11</span></li><li><a href="https://www.exploit-db.com/exploits/50552" target="_blank" rel="noopener">Apache HTTP Server 2.4.50 Path Traversal and Code Execution - Paper</a><span class="src">exploitdb</span><span class=meta>2021-11-29</span></li><li><a href="https://github.com/rapid7/metasploit-framework/blob/master/modules/auxiliary/scanner/http/apache_normalize_path.rb" target="_blank" rel="noopener">Apache 2.4.49/2.4.50 Traversal RCE scanner</a><span class="src">metasploit</span><span class=meta>normal · 2021-05-10</span></li><li><a href="https://raw.githubusercontent.com/projectdiscovery/nuclei-templates/main/http/cves/2021/CVE-2021-42013.yaml" target="_blank" rel="noopener">Apache 2.4.49/2.4.50 - Path Traversal and Remote Code Execution</a><span class="src">nuclei</span><span class=meta>critical</span></li><li><a href="https://hackerone.com/reports/1400238" target="_blank" rel="noopener">Internet Bug Bounty — Path Traversal and Remote Code Execution in Apache HTTP Server 2.4.49 and 2.4.50 (incomp</a><span class="src">hackerone</span><span class=meta>Critical · 2021-11-19</span></li><li><a href="https://github.com/vulhub/vulhub/blob/master/httpd/CVE-2021-42013/README.md" target="_blank" rel="noopener">Vulhub lab: httpd/CVE-2021-42013</a><span class="src">vulhub</span></li><li><a href="https://github.com/0day666/Vulnerability-verification" target="_blank" rel="noopener">https://github.com/0day666/Vulnerability-verification</a><span class="src">trickest</span></li><li><a href="https://github.com/0x783kb/Security-operation-book" target="_blank" rel="noopener">https://github.com/0x783kb/Security-operation-book</a><span class="src">trickest</span></li><li><a href="https://github.com/0xGabe/Apache-CVEs" target="_blank" rel="noopener">https://github.com/0xGabe/Apache-CVEs</a><span class="src">trickest</span></li><li><a href="https://github.com/0xStrygwyr/OSCP-Guide" target="_blank" rel="noopener">https://github.com/0xStrygwyr/OSCP-Guide</a><span class="src">trickest</span></li><li><a href="https://github.com/0xZipp0/OSCP" target="_blank" rel="noopener">https://github.com/0xZipp0/OSCP</a><span class="src">trickest</span></li><li><a href="https://github.com/0xb0rn3/r3cond0g" target="_blank" rel="noopener">https://github.com/0xb0rn3/r3cond0g</a><span class="src">trickest</span></li><li><a href="https://github.com/0xsyr0/OSCP" target="_blank" rel="noopener">https://github.com/0xsyr0/OSCP</a><span class="src">trickest</span></li><li><a href="https://github.com/12345qwert123456/CVE-2021-42013" target="_blank" rel="noopener">https://github.com/12345qwert123456/CVE-2021-42013</a><span class="src">trickest</span></li><li><a href="https://github.com/20142995/pocsuite3" target="_blank" rel="noopener">https://github.com/20142995/pocsuite3</a><span class="src">trickest</span></li><li><a href="https://github.com/5gstudent/cve-2021-41773-and-cve-2021-42013" target="_blank" rel="noopener">https://github.com/5gstudent/cve-2021-41773-and-cve-2021-42013</a><span class="src">trickest</span></li><li><a href="https://github.com/AMatheusFeitosaM/OSCP-Cheat" target="_blank" rel="noopener">https://github.com/AMatheusFeitosaM/OSCP-Cheat</a><span class="src">trickest</span></li><li><a href="https://github.com/AMazkun/vuln-report-normalizer" target="_blank" rel="noopener">https://github.com/AMazkun/vuln-report-normalizer</a><span class="src">trickest</span></li><li><a href="https://github.com/Adashz/CVE-2021-42013" target="_blank" rel="noopener">https://github.com/Adashz/CVE-2021-42013</a><span class="src">trickest</span></li><li><a href="https://github.com/AhenKay/INPT_report" target="_blank" rel="noopener">https://github.com/AhenKay/INPT_report</a><span class="src">trickest</span></li><li><a href="https://github.com/ArrestX/--POC" target="_blank" rel="noopener">https://github.com/ArrestX/--POC</a><span class="src">trickest</span></li><li><a href="https://github.com/Awrrays/FrameVul" target="_blank" rel="noopener">https://github.com/Awrrays/FrameVul</a><span class="src">trickest</span></li><li><a href="https://github.com/CHYbeta/Vuln100Topics" target="_blank" rel="noopener">https://github.com/CHYbeta/Vuln100Topics</a><span class="src">trickest</span></li><li><a href="https://github.com/CHYbeta/Vuln100Topics20" target="_blank" rel="noopener">https://github.com/CHYbeta/Vuln100Topics20</a><span class="src">trickest</span></li><li><a href="https://github.com/CLincat/vulcat" target="_blank" rel="noopener">https://github.com/CLincat/vulcat</a><span class="src">trickest</span></li></ul>
++        <ul class="findings"><li><a href="https://github.com/tangxiaofeng7/CVE-2022-22947-Spring-Cloud-Gateway" target="_blank" rel="noopener">tangxiaofeng7/CVE-2022-22947-Spring-Cloud-Gateway</a><span class="src">poc-in-github</span><span class=meta>53</span></li><li><a href="https://github.com/Vulnmachines/cve-2021-42013" target="_blank" rel="noopener">Vulnmachines/cve-2021-42013</a><span class="src">poc-in-github</span><span class=meta>18</span></li><li><a href="https://github.com/asaotomo/CVE-2021-42013-Apache-RCE-Poc-Exp" target="_blank" rel="noopener">asaotomo/CVE-2021-42013-Apache-RCE-Poc-Exp</a><span class="src">poc-in-github</span><span class=meta>9</span></li><li><a href="https://github.com/andrea-mattioli/apache-exploit-CVE-2021-42013" target="_blank" rel="noopener">andrea-mattioli/apache-exploit-CVE-2021-42013</a><span class="src">poc-in-github</span><span class=meta>9</span></li><li><a href="https://github.com/walnutsecurity/cve-2021-42013" target="_blank" rel="noopener">walnutsecurity/cve-2021-42013</a><span class="src">poc-in-github</span><span class=meta>4</span></li><li><a href="https://github.com/TheLastVvV/CVE-2021-42013_Reverse-Shell" target="_blank" rel="noopener">TheLastVvV/CVE-2021-42013_Reverse-Shell</a><span class="src">poc-in-github</span><span class=meta>4</span></li><li><a href="https://github.com/TheLastVvV/CVE-2021-42013" target="_blank" rel="noopener">TheLastVvV/CVE-2021-42013</a><span class="src">poc-in-github</span><span class=meta>2</span></li><li><a href="https://github.com/mauricelambert/CVE-2021-42013" target="_blank" rel="noopener">mauricelambert/CVE-2021-42013</a><span class="src">poc-in-github</span><span class=meta>1</span></li><li><a href="https://github.com/jas9reet/CVE-2021-42013-LAB" target="_blank" rel="noopener">jas9reet/CVE-2021-42013-LAB</a><span class="src">poc-in-github</span><span class=meta>1</span></li><li><a href="https://github.com/robotsense1337/CVE-2021-42013" target="_blank" rel="noopener">robotsense1337/CVE-2021-42013</a><span class="src">poc-in-github</span><span class=meta>1</span></li><li><a href="https://github.com/CyberCTF/vulhub-httpd-cve-2021-42013" target="_blank" rel="noopener">CyberCTF/vulhub-httpd-cve-2021-42013</a><span class="src">poc-in-github</span></li><li><a href="https://github.com/berraesen/apache-cve-2021-42013-lab" target="_blank" rel="noopener">berraesen/apache-cve-2021-42013-lab</a><span class="src">poc-in-github</span></li><li><a href="https://github.com/lmcewen9/cve-2021-42013" target="_blank" rel="noopener">lmcewen9/cve-2021-42013</a><span class="src">poc-in-github</span></li><li><a href="https://github.com/zeynepglygt/apache-cve-2021-42013-rce" target="_blank" rel="noopener">zeynepglygt/apache-cve-2021-42013-rce</a><span class="src">poc-in-github</span></li><li><a href="https://github.com/drackyjr/CVE-2021-42013" target="_blank" rel="noopener">drackyjr/CVE-2021-42013</a><span class="src">poc-in-github</span></li><li><a href="https://github.com/FakhriCRD/Apache-CVE-2021-42013-RCE-Exploit" target="_blank" rel="noopener">FakhriCRD/Apache-CVE-2021-42013-RCE-Exploit</a><span class="src">poc-in-github</span></li><li><a href="https://github.com/Makavellik/POC-CVE-2021-42013-EXPLOIT" target="_blank" rel="noopener">Makavellik/POC-CVE-2021-42013-EXPLOIT</a><span class="src">poc-in-github</span></li><li><a href="https://github.com/Jhonsonwannaa/cve-2021-42013-apache" target="_blank" rel="noopener">Jhonsonwannaa/cve-2021-42013-apache</a><span class="src">poc-in-github</span></li><li><a href="https://github.com/rafifdna/CVE-2021-42013" target="_blank" rel="noopener">rafifdna/CVE-2021-42013</a><span class="src">poc-in-github</span></li><li><a href="https://github.com/BassoNicolas/CVE-2021-42013" target="_blank" rel="noopener">BassoNicolas/CVE-2021-42013</a><span class="src">poc-in-github</span></li><li><a href="https://www.exploit-db.com/exploits/50406" target="_blank" rel="noopener">Apache HTTP Server 2.4.50 - Path Traversal &amp; Remote Code Execution (RCE)</a><span class="src">exploitdb</span><span class=meta>2021-10-13</span></li><li><a href="https://www.exploit-db.com/exploits/50446" target="_blank" rel="noopener">Apache HTTP Server 2.4.50 - Remote Code Execution (RCE) (2)</a><span class="src">exploitdb</span><span class=meta>2021-10-25</span></li><li><a href="https://www.exploit-db.com/exploits/50512" target="_blank" rel="noopener">Apache HTTP Server 2.4.50 - Remote Code Execution (RCE) (3)</a><span class="src">exploitdb</span><span class=meta>2021-11-11</span></li><li><a href="https://www.exploit-db.com/exploits/50552" target="_blank" rel="noopener">Apache HTTP Server 2.4.50 Path Traversal and Code Execution - Paper</a><span class="src">exploitdb</span><span class=meta>2021-11-29</span></li><li><a href="https://github.com/rapid7/metasploit-framework/blob/master/modules/auxiliary/scanner/http/apache_normalize_path.rb" target="_blank" rel="noopener">Apache 2.4.49/2.4.50 Traversal RCE scanner</a><span class="src">metasploit</span><span class=meta>normal · 2021-05-10</span></li><li><a href="https://github.com/rapid7/metasploit-framework/blob/master/modules/exploit/multi/http/apache_normalize_path_rce.rb" target="_blank" rel="noopener">Apache 2.4.49/2.4.50 Traversal RCE</a><span class="src">metasploit</span><span class=meta>excellent · 2021-05-10</span></li><li><a href="https://raw.githubusercontent.com/projectdiscovery/nuclei-templates/main/http/cves/2021/CVE-2021-42013.yaml" target="_blank" rel="noopener">Apache 2.4.49/2.4.50 - Path Traversal and Remote Code Execution</a><span class="src">nuclei</span><span class=meta>critical</span></li><li><a href="https://hackerone.com/reports/1400238" target="_blank" rel="noopener">Internet Bug Bounty — Path Traversal and Remote Code Execution in Apache HTTP Server 2.4.49 and 2.4.50 (incomp</a><span class="src">hackerone</span><span class=meta>Critical · 2021-11-19</span></li><li><a href="https://github.com/vulhub/vulhub/blob/master/httpd/CVE-2021-42013/README.md" target="_blank" rel="noopener">Vulhub lab: httpd/CVE-2021-42013</a><span class="src">vulhub</span></li><li><a href="https://github.com/0day666/Vulnerability-verification" target="_blank" rel="noopener">https://github.com/0day666/Vulnerability-verification</a><span class="src">trickest</span></li><li><a href="https://github.com/0x783kb/Security-operation-book" target="_blank" rel="noopener">https://github.com/0x783kb/Security-operation-book</a><span class="src">trickest</span></li><li><a href="https://github.com/0xGabe/Apache-CVEs" target="_blank" rel="noopener">https://github.com/0xGabe/Apache-CVEs</a><span class="src">trickest</span></li><li><a href="https://github.com/0xStrygwyr/OSCP-Guide" target="_blank" rel="noopener">https://github.com/0xStrygwyr/OSCP-Guide</a><span class="src">trickest</span></li><li><a href="https://github.com/0xZipp0/OSCP" target="_blank" rel="noopener">https://github.com/0xZipp0/OSCP</a><span class="src">trickest</span></li><li><a href="https://github.com/0xb0rn3/r3cond0g" target="_blank" rel="noopener">https://github.com/0xb0rn3/r3cond0g</a><span class="src">trickest</span></li><li><a href="https://github.com/0xsyr0/OSCP" target="_blank" rel="noopener">https://github.com/0xsyr0/OSCP</a><span class="src">trickest</span></li><li><a href="https://github.com/12345qwert123456/CVE-2021-42013" target="_blank" rel="noopener">https://github.com/12345qwert123456/CVE-2021-42013</a><span class="src">trickest</span></li><li><a href="https://github.com/20142995/pocsuite3" target="_blank" rel="noopener">https://github.com/20142995/pocsuite3</a><span class="src">trickest</span></li><li><a href="https://github.com/5gstudent/cve-2021-41773-and-cve-2021-42013" target="_blank" rel="noopener">https://github.com/5gstudent/cve-2021-41773-and-cve-2021-42013</a><span class="src">trickest</span></li><li><a href="https://github.com/AMatheusFeitosaM/OSCP-Cheat" target="_blank" rel="noopener">https://github.com/AMatheusFeitosaM/OSCP-Cheat</a><span class="src">trickest</span></li><li><a href="https://github.com/AMazkun/vuln-report-normalizer" target="_blank" rel="noopener">https://github.com/AMazkun/vuln-report-normalizer</a><span class="src">trickest</span></li><li><a href="https://github.com/Adashz/CVE-2021-42013" target="_blank" rel="noopener">https://github.com/Adashz/CVE-2021-42013</a><span class="src">trickest</span></li><li><a href="https://github.com/AhenKay/INPT_report" target="_blank" rel="noopener">https://github.com/AhenKay/INPT_report</a><span class="src">trickest</span></li><li><a href="https://github.com/ArrestX/--POC" target="_blank" rel="noopener">https://github.com/ArrestX/--POC</a><span class="src">trickest</span></li><li><a href="https://github.com/Awrrays/FrameVul" target="_blank" rel="noopener">https://github.com/Awrrays/FrameVul</a><span class="src">trickest</span></li><li><a href="https://github.com/CHYbeta/Vuln100Topics" target="_blank" rel="noopener">https://github.com/CHYbeta/Vuln100Topics</a><span class="src">trickest</span></li><li><a href="https://github.com/CHYbeta/Vuln100Topics20" target="_blank" rel="noopener">https://github.com/CHYbeta/Vuln100Topics20</a><span class="src">trickest</span></li><li><a href="https://github.com/CLincat/vulcat" target="_blank" rel="noopener">https://github.com/CLincat/vulcat</a><span class="src">trickest</span></li></ul>
+       </article>
+       <article class="card" style="border-left-color:#ff4d6d">
+         <header>
+diff --git a/reports/scan-report.md b/reports/scan-report.md
+index f0254a6..e346f11 100644
+--- a/reports/scan-report.md
++++ b/reports/scan-report.md
+@@ -1,6 +1,6 @@
+ # CVEre report
+ 
+-Generated 2026-10-31T13:30:24Z · 20 CVEs · 18 with public PoC · 2 in CISA KEV
++Generated 2026-10-31T13:37:14Z · 20 CVEs · 18 with public PoC · 2 in CISA KEV
+ 
+ ## Services
+ 
+@@ -17,8 +17,8 @@ Generated 2026-10-31T13:30:24Z · 20 CVEs · 18 with public PoC · 2 in CISA KEV
+ | CVE | Severity | CVSS | EPSS | KEV | PoCs | Sources |
+ |---|---|---|---|---|---|---|
+ | [CVE-2025-49844](https://nvd.nist.gov/vuln/detail/CVE-2025-49844) | CRITICAL | 9.9 | 82.6% | - | 31 | poc-in-github, nuclei, trickest |
+-| [CVE-2021-41773](https://nvd.nist.gov/vuln/detail/CVE-2021-41773) | CRITICAL | 9.8 | 100.0% | yes | 47 | poc-in-github, exploitdb, metasploit, nuclei, hackerone, vulhub, trickest |
+-| [CVE-2021-42013](https://nvd.nist.gov/vuln/detail/CVE-2021-42013) | CRITICAL | 9.8 | 100.0% | yes | 47 | poc-in-github, exploitdb, metasploit, nuclei, hackerone, vulhub, trickest |
++| [CVE-2021-41773](https://nvd.nist.gov/vuln/detail/CVE-2021-41773) | CRITICAL | 9.8 | 100.0% | yes | 48 | poc-in-github, exploitdb, metasploit, nuclei, hackerone, vulhub, trickest |
++| [CVE-2021-42013](https://nvd.nist.gov/vuln/detail/CVE-2021-42013) | CRITICAL | 9.8 | 100.0% | yes | 48 | poc-in-github, exploitdb, metasploit, nuclei, hackerone, vulhub, trickest |
+ | [CVE-2021-44790](https://nvd.nist.gov/vuln/detail/CVE-2021-44790) | CRITICAL | 9.8 | 96.8% | - | 22 | poc-in-github, exploitdb, trickest |
+ | [CVE-2023-38408](https://nvd.nist.gov/vuln/detail/CVE-2023-38408) | CRITICAL | 9.8 | 79.7% | - | 28 | poc-in-github, trickest |
+ | [CVE-2022-22720](https://nvd.nist.gov/vuln/detail/CVE-2022-22720) | CRITICAL | 9.8 | 28.2% | - | 19 | trickest |
+@@ -110,6 +110,7 @@ A flaw was found in a change made to path normalization in Apache HTTP Server 2.
+ | exploitdb | Apache HTTP Server 2.4.49 - Path Traversal & Remote Code Execution (RCE) | https://www.exploit-db.com/exploits/50383 |
+ | exploitdb | Apache HTTP Server 2.4.50 - Remote Code Execution (RCE) (3) | https://www.exploit-db.com/exploits/50512 |
+ | metasploit | Apache 2.4.49/2.4.50 Traversal RCE scanner | https://github.com/rapid7/metasploit-framework/blob/master/modules/auxiliary/scanner/http/apache_normalize_path.rb |
++| metasploit | Apache 2.4.49/2.4.50 Traversal RCE | https://github.com/rapid7/metasploit-framework/blob/master/modules/exploit/multi/http/apache_normalize_path_rce.rb |
+ | nuclei | Apache 2.4.49 - Path Traversal and Remote Code Execution | https://raw.githubusercontent.com/projectdiscovery/nuclei-templates/main/http/cves/2021/CVE-2021-41773.yaml |
+ | hackerone | Internet Bug Bounty — Path Traversal and Remote Code Execution in Apache HTTP Server 2.4.4 | https://hackerone.com/reports/1400238 |
+ | hackerone | Internet Bug Bounty — Path traversal and file disclosure vulnerability in Apache HTTP Serv | https://hackerone.com/reports/1394916 |
+@@ -170,6 +171,7 @@ It was found that the fix for CVE-2021-41773 in Apache HTTP Server 2.4.50 was in
+ | exploitdb | Apache HTTP Server 2.4.50 - Remote Code Execution (RCE) (3) | https://www.exploit-db.com/exploits/50512 |
+ | exploitdb | Apache HTTP Server 2.4.50 Path Traversal and Code Execution - Paper | https://www.exploit-db.com/exploits/50552 |
+ | metasploit | Apache 2.4.49/2.4.50 Traversal RCE scanner | https://github.com/rapid7/metasploit-framework/blob/master/modules/auxiliary/scanner/http/apache_normalize_path.rb |
++| metasploit | Apache 2.4.49/2.4.50 Traversal RCE | https://github.com/rapid7/metasploit-framework/blob/master/modules/exploit/multi/http/apache_normalize_path_rce.rb |
+ | nuclei | Apache 2.4.49/2.4.50 - Path Traversal and Remote Code Execution | https://raw.githubusercontent.com/projectdiscovery/nuclei-templates/main/http/cves/2021/CVE-2021-42013.yaml |
+ | hackerone | Internet Bug Bounty — Path Traversal and Remote Code Execution in Apache HTTP Server 2.4.4 | https://hackerone.com/reports/1400238 |
+ | vulhub | Vulhub lab: httpd/CVE-2021-42013 | https://github.com/vulhub/vulhub/blob/master/httpd/CVE-2021-42013/README.md |
+diff --git a/tests/test_cvere.py b/tests/test_cvere.py
+index 57a32fb..98c0b54 100644
+--- a/tests/test_cvere.py
++++ b/tests/test_cvere.py
+@@ -131,6 +131,17 @@ class TestSources(unittest.TestCase):
+         self.assertEqual(out[0].source, "poc-in-github")
+         self.assertEqual(out[0].meta["also_in"], ["trickest"])
+ 
++    def test_metasploit_modules_are_not_collapsed(self):
++        # many modules live in one repo: they must stay distinct
++        mods = [Finding(source="metasploit", url=f"https://github.com/rapid7/metasploit-framework/blob/master/modules/exploit/x{i}.rb",
++                        title=f"Module {i}") for i in range(3)]
++        self.assertEqual(len(dedupe_findings(mods)), 3)
++
++    def test_repo_level_sources_still_collapse(self):
++        links = [Finding(source="trickest", url="https://github.com/a/b/blob/main/poc.py"),
++                 Finding(source="trickest", url="https://github.com/a/b/tree/main/other")]
++        self.assertEqual(len(dedupe_findings(links)), 1)
++
+     def test_unknown_source_is_reported(self):
+         ctx = Ctx(Http(cache_dir=tempfile.mkdtemp()), limit=5)
+         findings, errors = run_sources(ctx, "CVE-2020-0001", ["nope"])
